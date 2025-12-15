@@ -1,0 +1,79 @@
+# ========== UNITY ==========
+[Ll]ibrary/
+[Tt]emp/
+[Oo]bj/
+[Bb]uild/
+[Bb]uilds/
+[Ll]ogs/
+[Mm]emoryCaptures/
+UserSettings/
+
+# ========== ASSETS ==========
+# Unity auto-generated assets
+Assets/StreamingAssets/aa/*
+Assets/AddressableAssetsData/*
+
+# Steamworks.NET native plugins (auto-included)
+Assets/Plugins/Steamworks.NET/Thumbnails/
+Assets/Plugins/Steamworks.NET/Editor/*
+
+# ========== VISUAL STUDIO / RIDER ==========
+*.csproj
+*.sln
+*.suo
+*.tmp
+*.user
+*.userprefs
+*.pidb
+*.booproj
+*.svd
+*.pdb
+*.mdb
+
+.vs/
+.idea/
+*.unityproj
+
+# ========== OPERATING SYSTEM ==========
+.DS_Store
+.DS_Store?
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# ========== UNITY PACKAGE EXPORTS ==========
+*.unitypackage
+
+# ========== LOGS & CRASH DUMPS ==========
+*.log
+*.psd
+*.dmp
+
+# ========== GIT LFS (OPTIONAL) ==========
+# Uncomment if you use Git LFS
+# *.png
+# *.jpg
+# *.jpeg
+# *.psd
+# *.tga
+# *.fbx
+# *.wav
+# *.mp3
+# *.mp4
+# *.ogg
+
+# ========== BUILDS / EXE / APP ==========
+Build/
+Builds/
+*.exe
+*.app
+*.apk
+*.aab
+*.msi
+
+# ========== MISC ==========
+*.bak
+*.orig
+*.old
+*.prefs
+*.swp
