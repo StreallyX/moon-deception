@@ -22,6 +22,10 @@ Système de tir raycast:
 
 ### Setup Unity
 
+**Dans Unity, cliquez sur Moon Deception > Setup Phase 1 pour configurer la scène automatiquement.**
+
+Ou manuellement:
+
 1. Créer un GameObject "Player" avec:
    - `CharacterController` component
    - `PlayerMovement` script
