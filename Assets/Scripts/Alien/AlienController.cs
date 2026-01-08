@@ -134,40 +134,43 @@ public class AlienController : MonoBehaviour
     {
         if (!isControlled) return;
         
-        // === FIXED GROUND COLLISION PATTERN ===
+        // === FIXED: Move() called EVERY frame to keep isGrounded updated ===
         
         // 1. Handle camera rotation (mouse only)
         HandleCameraRotation();
         
-        // 2. Horizontal movement
-        float horizontal = Input.GetAxisRaw("Horizontal"); // A/D = strafe
-        float vertical = Input.GetAxisRaw("Vertical");     // W/S = forward/back
+        // 2. Get input (can be zero)
+        float h = Input.GetAxisRaw("Horizontal"); // A/D = strafe
+        float v = Input.GetAxisRaw("Vertical");   // W/S = forward/back
         
-        Vector3 move = transform.forward * vertical + transform.right * horizontal;
-        move = move.normalized;
-        characterController.Move(move * moveSpeed * Time.deltaTime);
-        
-        // 3. Jump FIRST (before grounded check resets velocity)
+        // 3. Jump check FIRST (before gravity reset)
         if (Input.GetButtonDown("Jump") && characterController.isGrounded)
         {
             velocity.y = Mathf.Sqrt(jumpHeight * -2f * gravity);
-            Debug.Log("JUMP!");
+            Debug.Log("JUMP triggered!");
         }
         
-        // 4. Gravity - ALWAYS reset when grounded, no condition
-        if (characterController.isGrounded)
+        // 4. Gravity logic
+        if (characterController.isGrounded && velocity.y < 0)
         {
-            velocity.y = -2f; // ALWAYS reset when grounded
+            velocity.y = -2f;
         }
         else
         {
             velocity.y += gravity * Time.deltaTime;
         }
         
-        // 5. Apply vertical movement
-        characterController.Move(velocity * Time.deltaTime);
+        // 5. Calculate horizontal movement (can be zero)
+        Vector3 move = transform.forward * v + transform.right * h;
+        move = move.normalized;
         
-        // 6. Update camera position
+        // 6. ALWAYS call Move() - even if move is zero!
+        characterController.Move(move * moveSpeed * Time.deltaTime);
+        
+        // 7. ALWAYS apply vertical velocity
+        characterController.Move(new Vector3(0, velocity.y, 0) * Time.deltaTime);
+        
+        // 8. Update camera position
         UpdateCameraPosition();
         
         // Debug logging

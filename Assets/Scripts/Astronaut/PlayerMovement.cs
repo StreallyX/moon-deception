@@ -107,36 +107,40 @@ public class PlayerMovement : MonoBehaviour
     {
         if (!isControlled) return;
         
-        // === FIXED GROUND COLLISION PATTERN ===
+        // === FIXED: Move() called EVERY frame to keep isGrounded updated ===
         
         // 1. Handle mouse look
         HandleMouseLook();
         
-        // 2. Horizontal movement
-        float moveX = Input.GetAxis("Horizontal");
-        float moveZ = Input.GetAxis("Vertical");
-        Vector3 move = transform.right * moveX + transform.forward * moveZ;
-        controller.Move(move * walkSpeed * Time.deltaTime);
+        // 2. Get input (can be zero)
+        float h = Input.GetAxis("Horizontal");
+        float v = Input.GetAxis("Vertical");
         
-        // 3. Jump FIRST (before grounded check resets velocity)
+        // 3. Jump check FIRST (before gravity reset)
         if (Input.GetButtonDown("Jump") && controller.isGrounded)
         {
             velocity.y = Mathf.Sqrt(jumpHeight * -2f * gravity);
-            Debug.Log("JUMP!");
+            Debug.Log("JUMP triggered!");
         }
         
-        // 4. Gravity - ALWAYS reset when grounded, no condition
-        if (controller.isGrounded)
+        // 4. Gravity logic
+        if (controller.isGrounded && velocity.y < 0)
         {
-            velocity.y = -2f; // ALWAYS reset when grounded
+            velocity.y = -2f;
         }
         else
         {
             velocity.y += gravity * Time.deltaTime;
         }
         
-        // 5. Apply vertical movement
-        controller.Move(velocity * Time.deltaTime);
+        // 5. Calculate horizontal movement (can be zero)
+        Vector3 move = transform.right * h + transform.forward * v;
+        
+        // 6. ALWAYS call Move() - even if move is zero!
+        controller.Move(move * walkSpeed * Time.deltaTime);
+        
+        // 7. ALWAYS apply vertical velocity
+        controller.Move(new Vector3(0, velocity.y, 0) * Time.deltaTime);
         
         // Debug logging
         if (showDebugLogs && Time.frameCount % 60 == 0)
