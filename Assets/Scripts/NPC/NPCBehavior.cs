@@ -4,6 +4,7 @@ using System.Collections.Generic;
 /// <summary>
 /// Basic AI behavior for civilian NPCs on the moon base.
 /// NPCs patrol between waypoints and perform idle activities.
+/// Works without NavMesh - uses simple movement.
 /// </summary>
 public class NPCBehavior : MonoBehaviour, IDamageable
 {
@@ -24,22 +25,28 @@ public class NPCBehavior : MonoBehaviour, IDamageable
 
     [Header("Patrol")]
     [SerializeField] private List<Transform> waypoints = new List<Transform>();
-    [SerializeField] private float waypointReachDistance = 0.5f;
+    [SerializeField] private float waypointReachDistance = 1f;
     [SerializeField] private float idleTimeMin = 2f;
     [SerializeField] private float idleTimeMax = 5f;
+    
+    [Header("Auto Patrol (if no waypoints)")]
+    [SerializeField] private bool autoPatrol = true;
+    [SerializeField] private float patrolRadius = 5f;
+    private Vector3 autoPatrolTarget;
+    private bool hasAutoTarget = false;
 
     [Header("State")]
     [SerializeField] private NPCState currentState = NPCState.Idle;
     
     [Header("Behavior Flags")]
-    [SerializeField] private bool isAlien = false; // Hidden flag, can be set by GameManager
+    [SerializeField] private bool isAlien = false;
 
-    // Internal state
     private int currentWaypointIndex = 0;
     private float idleTimer = 0f;
     private float stateTimer = 0f;
     private Vector3 startPosition;
     private Animator animator;
+    private CharacterController characterController;
 
     public NPCState CurrentState => currentState;
     public bool IsAlien => isAlien;
@@ -49,10 +56,12 @@ public class NPCBehavior : MonoBehaviour, IDamageable
     {
         startPosition = transform.position;
         animator = GetComponent<Animator>();
+        characterController = GetComponent<CharacterController>();
         
-        // Start with random idle time
         idleTimer = Random.Range(idleTimeMin, idleTimeMax);
         SetState(NPCState.Idle);
+        
+        Debug.Log($"[NPC] {npcName} initialized at {startPosition}. Waypoints: {waypoints.Count}, AutoPatrol: {autoPatrol}");
     }
 
     void Update()
@@ -78,9 +87,6 @@ public class NPCBehavior : MonoBehaviour, IDamageable
         }
     }
 
-    /// <summary>
-    /// Handle idle behavior - wait then start walking
-    /// </summary>
     private void HandleIdleState()
     {
         if (stateTimer >= idleTimer)
@@ -89,58 +95,97 @@ public class NPCBehavior : MonoBehaviour, IDamageable
             {
                 SetState(NPCState.Walking);
             }
+            else if (autoPatrol)
+            {
+                // Generate random patrol target
+                GenerateAutoPatrolTarget();
+                SetState(NPCState.Walking);
+            }
             else
             {
-                // No waypoints, transition to working
                 SetState(NPCState.Working);
             }
         }
     }
 
-    /// <summary>
-    /// Handle walking to waypoints
-    /// </summary>
+    private void GenerateAutoPatrolTarget()
+    {
+        Vector2 randomCircle = Random.insideUnitCircle * patrolRadius;
+        autoPatrolTarget = startPosition + new Vector3(randomCircle.x, 0f, randomCircle.y);
+        hasAutoTarget = true;
+    }
+
     private void HandleWalkingState()
     {
-        if (waypoints.Count == 0)
+        Vector3 targetPosition;
+        
+        if (waypoints.Count > 0)
+        {
+            if (waypoints[currentWaypointIndex] == null)
+            {
+                SetState(NPCState.Idle);
+                return;
+            }
+            targetPosition = waypoints[currentWaypointIndex].position;
+        }
+        else if (autoPatrol && hasAutoTarget)
+        {
+            targetPosition = autoPatrolTarget;
+        }
+        else
         {
             SetState(NPCState.Idle);
             return;
         }
 
-        Transform targetWaypoint = waypoints[currentWaypointIndex];
-        Vector3 direction = (targetWaypoint.position - transform.position).normalized;
-        direction.y = 0; // Keep on ground plane
-
-        // Move towards waypoint
-        transform.position += direction * walkSpeed * Time.deltaTime;
-
-        // Face movement direction
-        if (direction.magnitude > 0.1f)
+        // Calculate direction (ignore Y for flat movement)
+        Vector3 direction = targetPosition - transform.position;
+        direction.y = 0;
+        
+        float distance = direction.magnitude;
+        
+        if (distance > waypointReachDistance)
         {
-            transform.rotation = Quaternion.Slerp(
-                transform.rotation,
-                Quaternion.LookRotation(direction),
-                10f * Time.deltaTime
-            );
+            direction.Normalize();
+            
+            // Move NPC
+            Vector3 movement = direction * walkSpeed * Time.deltaTime;
+            
+            if (characterController != null)
+            {
+                characterController.Move(movement);
+            }
+            else
+            {
+                transform.position += movement;
+            }
+            
+            // Rotate towards target
+            if (direction.sqrMagnitude > 0.01f)
+            {
+                Quaternion targetRotation = Quaternion.LookRotation(direction);
+                transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, 5f * Time.deltaTime);
+            }
         }
-
-        // Check if reached waypoint
-        float distance = Vector3.Distance(transform.position, targetWaypoint.position);
-        if (distance <= waypointReachDistance)
+        else
         {
-            currentWaypointIndex = (currentWaypointIndex + 1) % waypoints.Count;
+            // Reached destination
+            if (waypoints.Count > 0)
+            {
+                currentWaypointIndex = (currentWaypointIndex + 1) % waypoints.Count;
+            }
+            else
+            {
+                hasAutoTarget = false;
+            }
+            
             idleTimer = Random.Range(idleTimeMin, idleTimeMax);
             SetState(NPCState.Idle);
         }
     }
 
-    /// <summary>
-    /// Handle working behavior (interact with environment)
-    /// </summary>
     private void HandleWorkingState()
     {
-        // Simulate working animation duration
         if (stateTimer >= 5f)
         {
             idleTimer = Random.Range(idleTimeMin, idleTimeMax);
@@ -148,21 +193,27 @@ public class NPCBehavior : MonoBehaviour, IDamageable
         }
     }
 
-    /// <summary>
-    /// Handle panic behavior (run away from threats)
-    /// </summary>
     private void HandlePanickingState()
     {
-        // Run in a random direction
         if (stateTimer < 3f)
         {
-            Vector3 randomDir = new Vector3(
-                Random.Range(-1f, 1f),
-                0f,
-                Random.Range(-1f, 1f)
-            ).normalized;
+            // Run away from start position
+            Vector3 runDir = (transform.position - startPosition).normalized;
+            if (runDir.magnitude < 0.1f)
+            {
+                runDir = new Vector3(Random.Range(-1f, 1f), 0f, Random.Range(-1f, 1f)).normalized;
+            }
 
-            transform.position += randomDir * runSpeed * Time.deltaTime;
+            Vector3 movement = runDir * runSpeed * Time.deltaTime;
+            
+            if (characterController != null)
+            {
+                characterController.Move(movement);
+            }
+            else
+            {
+                transform.position += movement;
+            }
         }
         else
         {
@@ -170,24 +221,21 @@ public class NPCBehavior : MonoBehaviour, IDamageable
         }
     }
 
-    /// <summary>
-    /// Set NPC state
-    /// </summary>
     private void SetState(NPCState newState)
     {
+        if (currentState != newState)
+        {
+            Debug.Log($"[NPC] {npcName} state: {currentState} -> {newState}");
+        }
         currentState = newState;
         stateTimer = 0f;
 
-        // Trigger animation if available
         if (animator != null)
         {
             animator.SetInteger("State", (int)newState);
         }
     }
 
-    /// <summary>
-    /// Trigger panic response
-    /// </summary>
     public void Panic()
     {
         if (currentState != NPCState.Dead)
@@ -196,9 +244,6 @@ public class NPCBehavior : MonoBehaviour, IDamageable
         }
     }
 
-    /// <summary>
-    /// IDamageable implementation
-    /// </summary>
     public void TakeDamage(float amount)
     {
         if (currentState == NPCState.Dead) return;
@@ -216,54 +261,38 @@ public class NPCBehavior : MonoBehaviour, IDamageable
         }
     }
 
-    /// <summary>
-    /// Handle NPC death
-    /// </summary>
     private void Die()
     {
         SetState(NPCState.Dead);
         Debug.Log($"[NPC] {npcName} died! IsAlien: {isAlien}");
 
-        // Notify GameManager
         var gameManager = FindObjectOfType<GameManager>();
         if (gameManager != null)
         {
             gameManager.OnNPCKilled(this);
         }
 
-        // Disable collider and start death sequence
         var collider = GetComponent<Collider>();
         if (collider != null)
         {
             collider.enabled = false;
         }
 
-        // Could add death animation, ragdoll, etc.
-        Destroy(gameObject, 5f); // Remove after 5 seconds
+        Destroy(gameObject, 5f);
     }
 
-    /// <summary>
-    /// Mark this NPC as an alien (called by GameManager during setup)
-    /// </summary>
     public void SetAsAlien(bool alien)
     {
         isAlien = alien;
     }
 
-    /// <summary>
-    /// Add waypoint for patrol route
-    /// </summary>
     public void AddWaypoint(Transform waypoint)
     {
         waypoints.Add(waypoint);
     }
 
-    /// <summary>
-    /// Debug visualization
-    /// </summary>
     void OnDrawGizmosSelected()
     {
-        // Draw waypoint path
         if (waypoints.Count > 0)
         {
             Gizmos.color = Color.cyan;
@@ -278,6 +307,13 @@ public class NPCBehavior : MonoBehaviour, IDamageable
                     }
                 }
             }
+        }
+        else if (autoPatrol)
+        {
+            // Show patrol radius
+            Gizmos.color = Color.yellow;
+            Vector3 center = Application.isPlaying ? startPosition : transform.position;
+            Gizmos.DrawWireSphere(center, patrolRadius);
         }
     }
 }

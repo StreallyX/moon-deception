@@ -26,7 +26,8 @@ Follow the detailed steps below.
 
 1. **Create Player GameObject**
    - `GameObject > Create Empty` → name it `Player`
-   - Position: `(0, 1, 0)`
+   - ⚠️ **IMPORTANT: Position: `(0, 2, 0)`** — Player must spawn ABOVE ground, not inside it!
+   - The CharacterController center is at (0, 1, 0), so total player center will be at Y=3
 
 2. **Add Components to Player**
    - `Add Component > Character Controller`
@@ -36,6 +37,7 @@ Follow the detailed steps below.
    - `Add Component > PlayerMovement`
    - `Add Component > PlayerShooting`
    - `Add Component > StressSystem`
+   - `Add Component > SimpleCrosshair` (for visible crosshair)
 
 3. **Setup Camera**
    - Drag `Main Camera` as child of `Player`
@@ -144,9 +146,15 @@ Follow the detailed steps below.
 
 ## 🔧 Common Issues
 
-### Player falls through floor
+### Player falls through floor / feels inside ground
 - Ensure ground has a `Collider` component
 - Check `CharacterController` height and center
+- ⚠️ **Set Player Y position to 2 or higher** — The CharacterController center is offset by (0, 1, 0), so if Player is at Y=0, the feet will be at Y=0 (inside ground)
+- If using the scene from the repo, select Player in hierarchy and set Transform Position Y = 2
+
+### No crosshair visible
+- Add the `SimpleCrosshair` script to any GameObject (e.g., Player or MainCamera)
+- The script draws a crosshair using OnGUI, no Canvas needed
 
 ### Mouse look not working
 - Verify `cameraTransform` is assigned in `PlayerMovement`
@@ -160,6 +168,15 @@ Follow the detailed steps below.
 ### Stress bar not updating
 - Ensure `stressSlider` is assigned in `StressSystem`
 - Check Slider min/max values (should be 0-1 for normalized)
+- The updated `StressSystem.cs` auto-finds the slider by name "StressBar" if not assigned
+- Check console for "[StressSystem] Initialized. Slider found: true/false"
+
+### NPCs don't move/patrol
+- NPCs now have **Auto Patrol** enabled by default (no waypoints needed)
+- They patrol randomly within `patrolRadius` (default 5m) from start position
+- Check console for "[NPC] name state: Idle -> Walking" logs
+- Verify NPCs have `NPCBehavior` script attached
+- If adding waypoints manually, ensure waypoint Transforms are assigned in inspector
 
 ---
 

@@ -12,8 +12,8 @@ public class StressSystem : MonoBehaviour, IDamageable
     [Header("Stress Settings")]
     [SerializeField] private float maxStress = 100f;
     [SerializeField] private float currentStress = 0f;
-    [SerializeField] private float passiveRecoveryRate = 1f; // per second
-    [SerializeField] private float recoveryDelay = 3f; // seconds before passive recovery starts
+    [SerializeField] private float passiveRecoveryRate = 1f;
+    [SerializeField] private float recoveryDelay = 3f;
 
     [Header("Stress Modifiers")]
     [SerializeField] private float innocentKillStress = 25f;
@@ -33,14 +33,61 @@ public class StressSystem : MonoBehaviour, IDamageable
     private float lastStressTime;
     private bool isMaxed = false;
 
+    public static StressSystem Instance { get; private set; }
+
     public float CurrentStress => currentStress;
     public float StressPercent => currentStress / maxStress;
     public bool IsStressMaxed => isMaxed;
 
+    void Awake()
+    {
+        Instance = this;
+    }
+
     void Start()
     {
         currentStress = 0f;
+        
+        // Auto-find UI if not assigned
+        if (stressSlider == null)
+        {
+            stressSlider = GameObject.Find("StressBar")?.GetComponent<Slider>();
+            if (stressSlider == null)
+            {
+                var sliders = FindObjectsOfType<Slider>();
+                foreach (var s in sliders)
+                {
+                    if (s.name.ToLower().Contains("stress"))
+                    {
+                        stressSlider = s;
+                        break;
+                    }
+                }
+            }
+        }
+        
+        // Get fill image from slider
+        if (stressSlider != null && stressBarFill == null)
+        {
+            stressBarFill = stressSlider.fillRect?.GetComponent<Image>();
+        }
+        
+        // Create default gradient if not set
+        if (stressColorGradient == null)
+        {
+            stressColorGradient = new Gradient();
+            GradientColorKey[] colorKeys = new GradientColorKey[3];
+            colorKeys[0] = new GradientColorKey(Color.green, 0f);
+            colorKeys[1] = new GradientColorKey(Color.yellow, 0.5f);
+            colorKeys[2] = new GradientColorKey(Color.red, 1f);
+            GradientAlphaKey[] alphaKeys = new GradientAlphaKey[2];
+            alphaKeys[0] = new GradientAlphaKey(1f, 0f);
+            alphaKeys[1] = new GradientAlphaKey(1f, 1f);
+            stressColorGradient.SetKeys(colorKeys, alphaKeys);
+        }
+        
         UpdateUI();
+        Debug.Log($"[StressSystem] Initialized. Slider found: {stressSlider != null}");
     }
 
     void Update()
@@ -48,9 +95,6 @@ public class StressSystem : MonoBehaviour, IDamageable
         HandlePassiveRecovery();
     }
 
-    /// <summary>
-    /// Handles passive stress recovery when player stays calm
-    /// </summary>
     private void HandlePassiveRecovery()
     {
         if (isMaxed) return;
@@ -61,9 +105,6 @@ public class StressSystem : MonoBehaviour, IDamageable
         }
     }
 
-    /// <summary>
-    /// Add stress to the astronaut
-    /// </summary>
     public void AddStress(float amount)
     {
         if (isMaxed) return;
@@ -71,6 +112,7 @@ public class StressSystem : MonoBehaviour, IDamageable
         currentStress = Mathf.Clamp(currentStress + amount, 0f, maxStress);
         lastStressTime = Time.time;
         
+        Debug.Log($"[StressSystem] Stress added: {amount}. Current: {currentStress}/{maxStress}");
         OnStressChanged?.Invoke(currentStress);
         UpdateUI();
 
@@ -80,56 +122,44 @@ public class StressSystem : MonoBehaviour, IDamageable
         }
     }
 
-    /// <summary>
-    /// Reduce stress (e.g., from killing an alien)
-    /// </summary>
     public void ReduceStress(float amount)
     {
         if (isMaxed) return;
 
+        float oldStress = currentStress;
         currentStress = Mathf.Clamp(currentStress - amount, 0f, maxStress);
+        
+        if (amount > 0.1f) // Only log significant changes
+        {
+            Debug.Log($"[StressSystem] Stress reduced: {amount}. Current: {currentStress}/{maxStress}");
+        }
+        
         OnStressChanged?.Invoke(currentStress);
         UpdateUI();
     }
 
-    /// <summary>
-    /// Called when an innocent NPC is killed
-    /// </summary>
     public void OnInnocentKilled()
     {
         AddStress(innocentKillStress);
         Debug.Log($"[StressSystem] Innocent killed! Stress +{innocentKillStress}");
     }
 
-    /// <summary>
-    /// Called when an alien is killed
-    /// </summary>
     public void OnAlienKilled()
     {
         ReduceStress(alienKillStressRelief);
         Debug.Log($"[StressSystem] Alien killed! Stress -{alienKillStressRelief}");
     }
 
-    /// <summary>
-    /// Called when a chaos event occurs nearby
-    /// </summary>
     public void OnChaosEvent()
     {
         AddStress(chaosEventStress);
-        Debug.Log($"[StressSystem] Chaos event! Stress +{chaosEventStress}");
     }
 
-    /// <summary>
-    /// Called when witnessing another NPC's death
-    /// </summary>
     public void OnWitnessDeath()
     {
         AddStress(witnessDeathStress);
     }
 
-    /// <summary>
-    /// Triggers the stress overload event (aliens transform, lights out)
-    /// </summary>
     private void TriggerStressOverload()
     {
         isMaxed = true;
@@ -137,9 +167,6 @@ public class StressSystem : MonoBehaviour, IDamageable
         OnStressMaxed?.Invoke();
     }
 
-    /// <summary>
-    /// Reset stress system (e.g., for new round)
-    /// </summary>
     public void ResetStress()
     {
         currentStress = 0f;
@@ -147,13 +174,12 @@ public class StressSystem : MonoBehaviour, IDamageable
         UpdateUI();
     }
 
-    /// <summary>
-    /// Update UI elements
-    /// </summary>
     private void UpdateUI()
     {
         if (stressSlider != null)
         {
+            stressSlider.minValue = 0f;
+            stressSlider.maxValue = 1f;
             stressSlider.value = StressPercent;
         }
 
@@ -163,7 +189,6 @@ public class StressSystem : MonoBehaviour, IDamageable
         }
     }
 
-    // IDamageable implementation - astronaut takes stress as damage
     public void TakeDamage(float amount)
     {
         AddStress(amount);
