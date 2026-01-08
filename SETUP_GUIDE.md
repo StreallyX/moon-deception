@@ -228,13 +228,83 @@ NPCBehavior
 
 ---
 
-## 🚧 Next Steps (Phase 2)
+## 👽 Phase 2: Alien Setup
 
-1. Implement `AlienController` for TPS gameplay
-2. Add `HungerSystem` mechanics
-3. Expand NPC AI with behavior states
-4. Create chaos event system
-5. Build out map sections
+### Alien Player Setup
+
+1. **Create Alien GameObject**
+   - `GameObject > 3D Object > Capsule` → name it `Alien`
+   - Position: `(5, 2, 5)` — away from astronaut spawn
+   - Tag: `Alien`
+   - Layer: `Alien`
+
+2. **Add Components to Alien**
+   - `Add Component > AlienController` (TPS movement + camera)
+   - `Add Component > HungerSystem` (hunger mechanics)
+   - `Add Component > AlienEatSystem` (eating NPCs/aliens)
+
+3. **Camera Setup for Alien**
+   - Create a NEW camera for the Alien (or disable Main Camera when testing alien)
+   - Assign camera to `AlienController > cameraTransform`
+   - The TPS camera follows behind automatically — NO need to parent it
+
+4. **Configure AlienEatSystem**
+   - `Edible Tags`: `NPC`, `Alien`
+   - `Player Tag`: `Player` (NEVER edible)
+   - `Detect Range`: 3
+   - `Detect Radius`: 1
+
+### Hunger Bar UI Setup
+
+1. **Create Hunger Slider**
+   - Under Canvas: `UI > Slider` → name it `HungerBar`
+   - Anchor: Top-left
+   - Position: `(120, -60, 0)` — below stress bar
+   - Width: `200`, Height: `20`
+   - Uncheck `Interactable`
+
+2. **Style the Hunger Bar**
+   - Background: Dark gray
+   - Fill: Green (full) → Red (empty) gradient
+   - Delete Handle
+
+3. **Auto-connection**
+   - HungerSystem auto-finds `HungerBar` by name
+
+### Eat Prompt UI
+- `EatPromptUI` auto-creates the prompt panel if not found
+- Shows "Press E to EAT" when looking at valid target
+
+### Target Highlighting
+- `TargetHighlight` auto-applies red emission glow to edible targets
+- No manual setup needed — added dynamically
+
+### Important Tags Setup
+1. Go to `Edit > Project Settings > Tags and Layers`
+2. Add Tag: `NPC` (for edible civilians)
+3. Add Tag: `Alien` (for other alien players)
+4. Add Tag: `Player` (astronaut — NEVER edible)
+
+### Testing Alien Mechanics
+- [ ] TPS camera follows behind alien
+- [ ] WASD moves alien relative to camera direction
+- [ ] Mouse rotates camera smoothly
+- [ ] Hunger bar visible and decreasing over time
+- [ ] Looking at NPC shows red highlight
+- [ ] "Press E to EAT" prompt appears
+- [ ] Pressing E destroys NPC and restores hunger
+- [ ] Blood decal spawns at eat location
+- [ ] CANNOT eat player (no highlight, no prompt)
+
+---
+
+## 🚧 Next Steps (Phase 3)
+
+1. Multiplayer networking setup
+2. Voting system implementation
+3. Emergency meeting mechanics
+4. Map expansion and tasks
+5. Win/lose conditions refinement
 
 ---
 
