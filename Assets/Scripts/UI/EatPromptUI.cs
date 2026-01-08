@@ -29,8 +29,19 @@ public class EatPromptUI : MonoBehaviour
             CreatePromptUI();
         }
         
+        // CRITICAL: Hide prompt by default - only show when looking at valid target
+        Hide();
+        Debug.Log("[EatPromptUI] Initialized - prompt hidden by default");
+    }
+    
+    public void Show()
+    {
+        SetVisible(true);
+    }
+    
+    public void Hide()
+    {
         SetVisible(false);
-        Debug.Log("[EatPromptUI] Initialized");
     }
     
     void CreatePromptUI()

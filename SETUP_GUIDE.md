@@ -29,7 +29,14 @@ Follow the detailed steps below.
    - ⚠️ **IMPORTANT: Position: `(0, 2, 0)`** — Player must spawn ABOVE ground, not inside it!
    - The CharacterController center is at (0, 1, 0), so total player center will be at Y=3
 
-2. **Add Components to Player**
+2. **Add Visible Mesh to Player** ⚠️ NEW
+   - `GameObject > 3D Object > Capsule` as **child** of Player
+   - Name it `PlayerMesh`
+   - Local Position: `(0, 1, 0)` — aligned with CharacterController center
+   - Remove the Capsule's default `CapsuleCollider` component (Player uses CharacterController)
+   - This makes the player visible in the scene
+
+4. **Add Components to Player**
    - `Add Component > Character Controller`
      - Height: `2`
      - Radius: `0.5`
@@ -43,7 +50,7 @@ Follow the detailed steps below.
    - `Add Component > StressSystem`
    - `Add Component > SimpleCrosshair` (for visible crosshair)
 
-3. **Setup Camera**
+5. **Setup Camera**
    - Drag `Main Camera` as child of `Player`
    - Camera Position: `(0, 1.6, 0)` (eye level)
    - Camera Rotation: `(0, 0, 0)`

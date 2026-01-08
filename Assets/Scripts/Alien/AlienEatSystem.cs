@@ -41,6 +41,12 @@ public class AlienEatSystem : MonoBehaviour
             eatPromptUI = FindObjectOfType<EatPromptUI>();
         }
         
+        // Hide prompt by default on start
+        if (eatPromptUI != null)
+        {
+            eatPromptUI.SetVisible(false);
+        }
+        
         Debug.Log("[AlienEatSystem] Initialized");
     }
     
@@ -164,7 +170,25 @@ public class AlienEatSystem : MonoBehaviour
     
     void EatTarget(GameObject target)
     {
+        // CRITICAL: Null check - don't proceed if target is null or is self
+        if (target == null)
+        {
+            Debug.LogWarning("[AlienEatSystem] EatTarget called with null target!");
+            return;
+        }
+        
+        // SAFETY: Never destroy self or our own gameObject
+        if (target == gameObject || target.transform.IsChildOf(transform))
+        {
+            Debug.LogError("[AlienEatSystem] Attempted to eat self! Aborting.");
+            return;
+        }
+        
         Debug.Log($"[AlienEatSystem] Eating: {target.name}");
+        
+        // Store target info before destroying
+        Vector3 targetPosition = target.transform.position;
+        NPCBehavior npc = target.GetComponent<NPCBehavior>();
         
         // Restore hunger
         if (hungerSystem != null)
@@ -172,35 +196,28 @@ public class AlienEatSystem : MonoBehaviour
             hungerSystem.Eat();
         }
         
-        // Spawn blood decal
+        // Spawn blood decal at target position (before destroying)
         if (bloodDecalPrefab != null)
         {
-            Instantiate(bloodDecalPrefab, target.transform.position, Quaternion.identity);
+            Instantiate(bloodDecalPrefab, targetPosition, Quaternion.identity);
         }
         else
         {
             // Create placeholder blood effect
-            CreateBloodPlaceholder(target.transform.position);
+            CreateBloodPlaceholder(targetPosition);
         }
         
         // Notify GameManager if it's an NPC
-        NPCBehavior npc = target.GetComponent<NPCBehavior>();
         if (npc != null)
         {
-            if (npc != null)
+            GameManager gm = FindObjectOfType<GameManager>();
+            if (gm != null)
             {
-                GameManager gm = FindObjectOfType<GameManager>();
-                if (gm != null)
-                {
-                    gm.OnNPCKilled(npc);
-                }
+                gm.OnNPCKilled(npc);
             }
         }
         
-        // Destroy target
-        Destroy(target);
-        
-        // Clear references
+        // Clear references BEFORE destroying to avoid stale references
         currentTarget = null;
         currentHighlight = null;
         
@@ -208,6 +225,9 @@ public class AlienEatSystem : MonoBehaviour
         {
             eatPromptUI.SetVisible(false);
         }
+        
+        // Destroy target LAST (not self!)
+        Destroy(target);
     }
     
     void CreateBloodPlaceholder(Vector3 position)

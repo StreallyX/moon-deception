@@ -94,10 +94,13 @@ public class AlienController : MonoBehaviour
             transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, rotationSpeed * Time.deltaTime);
         }
         
-        // Apply gravity
-        if (characterController.isGrounded)
+        // Ground check with small distance tolerance
+        bool isGrounded = characterController.isGrounded;
+        
+        // Apply gravity only when not grounded
+        if (isGrounded && verticalVelocity < 0)
         {
-            verticalVelocity = -2f;
+            verticalVelocity = -2f; // Small downward force to keep grounded
         }
         else
         {
@@ -129,7 +132,7 @@ public class AlienController : MonoBehaviour
         // Exemple :
         // - changer de mesh
         // - augmenter la vitesse
-        // - activer des capacités
+        // - activer des capacitÃ©s
         // - passer en mode chaos
     }
 }
