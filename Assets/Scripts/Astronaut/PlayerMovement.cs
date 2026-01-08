@@ -19,20 +19,20 @@ public class PlayerMovement : MonoBehaviour
     private Vector3 velocity;
     private float xRotation = 0f;
     private bool isGrounded;
+    
+    // Static reference to track active player
+    public static PlayerMovement ActivePlayer { get; private set; }
+    public static bool IsPlayerControlled => ActivePlayer != null && ActivePlayer.enabled;
+    
+    private bool isControlled = false;
 
     void Start()
     {
         controller = GetComponent<CharacterController>();
         
         // Ensure CharacterController has correct settings for ground collision
-        // These can be overridden in Inspector, but set sensible defaults
-        if (controller.skinWidth < 0.05f)
-            controller.skinWidth = 0.08f;
-        if (controller.stepOffset > 0.5f)
-            controller.stepOffset = 0.3f;
-        
-        Cursor.lockState = CursorLockMode.Locked;
-        Cursor.visible = false;
+        controller.skinWidth = 0.08f;
+        controller.stepOffset = 0.3f;
 
         // Auto-find camera if not assigned
         if (cameraTransform == null)
@@ -46,9 +46,31 @@ public class PlayerMovement : MonoBehaviour
         
         Debug.Log($"[PlayerMovement] Initialized. Camera: {cameraTransform?.name}, Controller grounded: {controller.isGrounded}");
     }
+    
+    void OnEnable()
+    {
+        ActivePlayer = this;
+        isControlled = true;
+        Cursor.lockState = CursorLockMode.Locked;
+        Cursor.visible = false;
+        Debug.Log("[PlayerMovement] Enabled - Player is now controlled");
+    }
+    
+    void OnDisable()
+    {
+        if (ActivePlayer == this)
+        {
+            ActivePlayer = null;
+        }
+        isControlled = false;
+        Debug.Log("[PlayerMovement] Disabled - Player control released");
+    }
 
     void Update()
     {
+        // Only process input if this is the active controlled character
+        if (!isControlled) return;
+        
         HandleMouseLook();
         HandleMovement();
         HandleJump();
@@ -113,5 +135,21 @@ public class PlayerMovement : MonoBehaviour
         }
         
         controller.Move(velocity * Time.deltaTime);
+    }
+    
+    /// <summary>
+    /// Enable control of this player
+    /// </summary>
+    public void EnableControl()
+    {
+        enabled = true;
+    }
+    
+    /// <summary>
+    /// Disable control of this player
+    /// </summary>
+    public void DisableControl()
+    {
+        enabled = false;
     }
 }

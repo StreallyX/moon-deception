@@ -26,7 +26,13 @@ public class AlienController : MonoBehaviour
     private float verticalVelocity = 0f;
     private float gravity = -19.62f;
     
-    void Start()
+    // Static reference to track active controlled character
+    public static AlienController ActiveAlien { get; private set; }
+    public static bool IsAlienControlled => ActiveAlien != null && ActiveAlien.enabled;
+    
+    private bool isControlled = false;
+    
+    void Awake()
     {
         characterController = GetComponent<CharacterController>();
         if (characterController == null)
@@ -34,13 +40,16 @@ public class AlienController : MonoBehaviour
             characterController = gameObject.AddComponent<CharacterController>();
         }
         
-        // Fix CharacterController settings
+        // FORCE CharacterController settings to prevent falling through ground
         characterController.skinWidth = 0.08f;
         characterController.stepOffset = 0.3f;
         characterController.height = 2f;
         characterController.radius = 0.5f;
         characterController.center = new Vector3(0, 1f, 0);
-        
+    }
+    
+    void Start()
+    {
         if (cameraTransform == null)
         {
             cameraTransform = Camera.main?.transform;
@@ -51,16 +60,35 @@ public class AlienController : MonoBehaviour
             hungerSystem = GetComponent<HungerSystem>();
         }
         
-        Cursor.lockState = CursorLockMode.Locked;
-        Cursor.visible = false;
-        
         yaw = transform.eulerAngles.y;
         
         Debug.Log("[AlienController] Initialized");
     }
     
+    void OnEnable()
+    {
+        ActiveAlien = this;
+        isControlled = true;
+        Cursor.lockState = CursorLockMode.Locked;
+        Cursor.visible = false;
+        Debug.Log("[AlienController] Enabled - Alien is now controlled");
+    }
+    
+    void OnDisable()
+    {
+        if (ActiveAlien == this)
+        {
+            ActiveAlien = null;
+        }
+        isControlled = false;
+        Debug.Log("[AlienController] Disabled - Alien control released");
+    }
+    
     void Update()
     {
+        // Only process input if this is the active controlled character
+        if (!isControlled) return;
+        
         HandleCameraRotation();
         HandleMovement();
         UpdateCameraPosition();
@@ -124,15 +152,25 @@ public class AlienController : MonoBehaviour
         cameraTransform.position = Vector3.Lerp(cameraTransform.position, targetPosition, 10f * Time.deltaTime);
         cameraTransform.LookAt(transform.position + Vector3.up * 1.5f);
     }
+    
+    /// <summary>
+    /// Enable control of this alien
+    /// </summary>
+    public void EnableControl()
+    {
+        enabled = true;
+    }
+    
+    /// <summary>
+    /// Disable control of this alien
+    /// </summary>
+    public void DisableControl()
+    {
+        enabled = false;
+    }
 
     public void Transform()
     {
         Debug.Log("[AlienController] Alien transforming!");
-
-        // Exemple :
-        // - changer de mesh
-        // - augmenter la vitesse
-        // - activer des capacités
-        // - passer en mode chaos
     }
 }

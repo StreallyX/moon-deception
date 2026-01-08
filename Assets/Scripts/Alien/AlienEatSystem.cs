@@ -2,20 +2,19 @@ using UnityEngine;
 
 /// <summary>
 /// Handles alien eating mechanics - detecting and consuming NPCs/other aliens.
-/// NEVER allows eating the player.
+/// NEVER allows eating the player or self.
 /// </summary>
 public class AlienEatSystem : MonoBehaviour
 {
     [Header("Detection")]
     public float detectRange = 3f;
-    public float detectRadius = 1f;
     public LayerMask edibleLayers; // Set to NPC layer
     public string[] edibleTags = { "NPC", "Alien" };
     public string playerTag = "Player";
     
     [Header("References")]
     public HungerSystem hungerSystem;
-    public EatPromptUI eatPromptUI;
+    public GameObject eatPromptObject; // Changed to GameObject for easy Inspector assignment
     public Transform cameraTransform;
     
     [Header("Effects")]
@@ -23,6 +22,7 @@ public class AlienEatSystem : MonoBehaviour
     
     private GameObject currentTarget;
     private TargetHighlight currentHighlight;
+    private EatPromptUI eatPromptUI;
     
     void Start()
     {
@@ -36,6 +36,11 @@ public class AlienEatSystem : MonoBehaviour
             cameraTransform = Camera.main?.transform;
         }
         
+        // Get EatPromptUI from GameObject reference or find it
+        if (eatPromptObject != null)
+        {
+            eatPromptUI = eatPromptObject.GetComponent<EatPromptUI>();
+        }
         if (eatPromptUI == null)
         {
             eatPromptUI = FindObjectOfType<EatPromptUI>();
@@ -60,30 +65,28 @@ public class AlienEatSystem : MonoBehaviour
     {
         GameObject newTarget = null;
         
-        // Raycast from camera forward
+        // Raycast from camera forward - use precise raycast, not sphere cast
         if (cameraTransform != null)
         {
             Ray ray = new Ray(cameraTransform.position, cameraTransform.forward);
-            RaycastHit hit;
+            RaycastHit[] hits = Physics.RaycastAll(ray, detectRange);
             
-            // First try direct raycast
-            if (Physics.Raycast(ray, out hit, detectRange))
+            // Sort by distance to get closest first
+            System.Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
+            
+            foreach (RaycastHit hit in hits)
             {
+                // CRITICAL: Skip self - check if hit is this gameObject or any child/parent
+                if (hit.transform == transform) continue;
+                if (hit.transform.root == transform.root) continue;
+                if (hit.transform.IsChildOf(transform)) continue;
+                if (transform.IsChildOf(hit.transform)) continue;
+                
+                // Check if edible
                 if (IsEdible(hit.collider.gameObject))
                 {
                     newTarget = hit.collider.gameObject;
-                }
-            }
-            
-            // If no direct hit, try sphere cast
-            if (newTarget == null)
-            {
-                if (Physics.SphereCast(ray, detectRadius, out hit, detectRange))
-                {
-                    if (IsEdible(hit.collider.gameObject))
-                    {
-                        newTarget = hit.collider.gameObject;
-                    }
+                    break;
                 }
             }
         }
@@ -130,6 +133,12 @@ public class AlienEatSystem : MonoBehaviour
             return false;
         }
         
+        // NEVER eat self
+        if (target == gameObject || target.transform.root == transform.root)
+        {
+            return false;
+        }
+        
         // Check if target has edible tag
         foreach (string tag in edibleTags)
         {
@@ -144,6 +153,11 @@ public class AlienEatSystem : MonoBehaviour
         while (parent != null)
         {
             if (parent.CompareTag(playerTag))
+            {
+                return false;
+            }
+            // Skip if parent is self
+            if (parent == transform)
             {
                 return false;
             }
@@ -178,7 +192,7 @@ public class AlienEatSystem : MonoBehaviour
         }
         
         // SAFETY: Never destroy self or our own gameObject
-        if (target == gameObject || target.transform.IsChildOf(transform))
+        if (target == gameObject || target.transform.IsChildOf(transform) || target.transform.root == transform.root)
         {
             Debug.LogError("[AlienEatSystem] Attempted to eat self! Aborting.");
             return;

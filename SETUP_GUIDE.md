@@ -292,16 +292,35 @@ NPCBehavior
 3. Add Tag: `Alien` (for other alien players)
 4. Add Tag: `Player` (astronaut — NEVER edible)
 
+### GameController Setup (Input Conflict Fix)
+
+**CRITICAL: To prevent both Player and Alien from moving together:**
+
+1. **Create GameController**
+   - `GameObject > Create Empty` → name it `GameController`
+   - `Add Component > GameController`
+   - Assign `playerMovement` (drag Player GameObject)
+   - Assign `alienController` (drag Alien GameObject)
+
+2. **Switch Key**: Press **TAB** to toggle between Player and Alien control
+
+3. **Alternative: Manual Disable**
+   - When testing Alien: Disable `PlayerMovement` script on Player
+   - When testing Player: Disable `AlienController` script on Alien
+
 ### Testing Alien Mechanics
 - [ ] TPS camera follows behind alien
 - [ ] WASD moves alien relative to camera direction
 - [ ] Mouse rotates camera smoothly
 - [ ] Hunger bar visible and decreasing over time
-- [ ] Looking at NPC shows red highlight
+- [ ] Looking at NPC shows red highlight (NOT self!)
 - [ ] "Press E to EAT" prompt appears
 - [ ] Pressing E destroys NPC and restores hunger
 - [ ] Blood decal spawns at eat location
 - [ ] CANNOT eat player (no highlight, no prompt)
+- [ ] CANNOT eat self (raycast ignores own collider)
+- [ ] TAB switches between Player and Alien control
+- [ ] Only ONE character moves at a time
 
 ---
 
