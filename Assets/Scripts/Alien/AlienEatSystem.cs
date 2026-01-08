@@ -2,20 +2,19 @@ using UnityEngine;
 
 /// <summary>
 /// Handles alien eating mechanics - detecting and consuming NPCs/other aliens.
-/// NEVER allows eating the player or self.
+/// Raycast originates from ALIEN's position (eye level), NOT from camera.
 /// </summary>
 public class AlienEatSystem : MonoBehaviour
 {
     [Header("Detection")]
     public float detectRange = 3f;
-    public LayerMask edibleLayers; // Set to NPC layer
+    public LayerMask edibleLayers;
     public string[] edibleTags = { "NPC", "Alien" };
     public string playerTag = "Player";
     
     [Header("References")]
     public HungerSystem hungerSystem;
-    public GameObject eatPromptObject; // Changed to GameObject for easy Inspector assignment
-    public Transform cameraTransform;
+    public GameObject eatPromptObject;
     
     [Header("Effects")]
     public GameObject bloodDecalPrefab;
@@ -31,12 +30,6 @@ public class AlienEatSystem : MonoBehaviour
             hungerSystem = GetComponent<HungerSystem>();
         }
         
-        if (cameraTransform == null)
-        {
-            cameraTransform = Camera.main?.transform;
-        }
-        
-        // Get EatPromptUI from GameObject reference or find it
         if (eatPromptObject != null)
         {
             eatPromptUI = eatPromptObject.GetComponent<EatPromptUI>();
@@ -46,13 +39,12 @@ public class AlienEatSystem : MonoBehaviour
             eatPromptUI = FindObjectOfType<EatPromptUI>();
         }
         
-        // Hide prompt by default on start
         if (eatPromptUI != null)
         {
             eatPromptUI.SetVisible(false);
         }
         
-        Debug.Log("[AlienEatSystem] Initialized");
+        Debug.Log("[AlienEatSystem] Initialized - Raycast from alien position");
     }
     
     void Update()
@@ -65,36 +57,39 @@ public class AlienEatSystem : MonoBehaviour
     {
         GameObject newTarget = null;
         
-        // Raycast from camera forward - use precise raycast, not sphere cast
-        if (cameraTransform != null)
+        // Raycast from ALIEN's position at eye level, looking FORWARD (alien's facing direction)
+        // NOT from camera position!
+        Vector3 rayOrigin = transform.position + Vector3.up * 1.5f; // Eye level
+        Vector3 rayDirection = transform.forward; // Alien's facing direction
+        
+        Ray ray = new Ray(rayOrigin, rayDirection);
+        RaycastHit[] hits = Physics.RaycastAll(ray, detectRange);
+        
+        // Debug visualization
+        Debug.DrawRay(rayOrigin, rayDirection * detectRange, Color.green);
+        
+        // Sort by distance to get closest first
+        System.Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
+        
+        foreach (RaycastHit hit in hits)
         {
-            Ray ray = new Ray(cameraTransform.position, cameraTransform.forward);
-            RaycastHit[] hits = Physics.RaycastAll(ray, detectRange);
+            // Skip self
+            if (hit.transform == transform) continue;
+            if (hit.transform.root == transform.root) continue;
+            if (hit.transform.IsChildOf(transform)) continue;
+            if (transform.IsChildOf(hit.transform)) continue;
             
-            // Sort by distance to get closest first
-            System.Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
-            
-            foreach (RaycastHit hit in hits)
+            // Check if edible
+            if (IsEdible(hit.collider.gameObject))
             {
-                // CRITICAL: Skip self - check if hit is this gameObject or any child/parent
-                if (hit.transform == transform) continue;
-                if (hit.transform.root == transform.root) continue;
-                if (hit.transform.IsChildOf(transform)) continue;
-                if (transform.IsChildOf(hit.transform)) continue;
-                
-                // Check if edible
-                if (IsEdible(hit.collider.gameObject))
-                {
-                    newTarget = hit.collider.gameObject;
-                    break;
-                }
+                newTarget = hit.collider.gameObject;
+                break;
             }
         }
         
         // Update target highlighting
         if (newTarget != currentTarget)
         {
-            // Remove old highlight
             if (currentTarget != null && currentHighlight != null)
             {
                 currentHighlight.RemoveHighlight();
@@ -102,7 +97,6 @@ public class AlienEatSystem : MonoBehaviour
             
             currentTarget = newTarget;
             
-            // Add new highlight
             if (currentTarget != null)
             {
                 currentHighlight = currentTarget.GetComponent<TargetHighlight>();
@@ -118,7 +112,6 @@ public class AlienEatSystem : MonoBehaviour
             }
         }
         
-        // Update UI prompt
         if (eatPromptUI != null)
         {
             eatPromptUI.SetVisible(currentTarget != null);
@@ -156,7 +149,6 @@ public class AlienEatSystem : MonoBehaviour
             {
                 return false;
             }
-            // Skip if parent is self
             if (parent == transform)
             {
                 return false;
@@ -184,14 +176,12 @@ public class AlienEatSystem : MonoBehaviour
     
     void EatTarget(GameObject target)
     {
-        // CRITICAL: Null check - don't proceed if target is null or is self
         if (target == null)
         {
             Debug.LogWarning("[AlienEatSystem] EatTarget called with null target!");
             return;
         }
         
-        // SAFETY: Never destroy self or our own gameObject
         if (target == gameObject || target.transform.IsChildOf(transform) || target.transform.root == transform.root)
         {
             Debug.LogError("[AlienEatSystem] Attempted to eat self! Aborting.");
@@ -200,28 +190,23 @@ public class AlienEatSystem : MonoBehaviour
         
         Debug.Log($"[AlienEatSystem] Eating: {target.name}");
         
-        // Store target info before destroying
         Vector3 targetPosition = target.transform.position;
         NPCBehavior npc = target.GetComponent<NPCBehavior>();
         
-        // Restore hunger
         if (hungerSystem != null)
         {
             hungerSystem.Eat();
         }
         
-        // Spawn blood decal at target position (before destroying)
         if (bloodDecalPrefab != null)
         {
             Instantiate(bloodDecalPrefab, targetPosition, Quaternion.identity);
         }
         else
         {
-            // Create placeholder blood effect
             CreateBloodPlaceholder(targetPosition);
         }
         
-        // Notify GameManager if it's an NPC
         if (npc != null)
         {
             GameManager gm = FindObjectOfType<GameManager>();
@@ -231,7 +216,6 @@ public class AlienEatSystem : MonoBehaviour
             }
         }
         
-        // Clear references BEFORE destroying to avoid stale references
         currentTarget = null;
         currentHighlight = null;
         
@@ -240,13 +224,11 @@ public class AlienEatSystem : MonoBehaviour
             eatPromptUI.SetVisible(false);
         }
         
-        // Destroy target LAST (not self!)
         Destroy(target);
     }
     
     void CreateBloodPlaceholder(Vector3 position)
     {
-        // Simple red sphere as blood placeholder
         GameObject blood = GameObject.CreatePrimitive(PrimitiveType.Sphere);
         blood.name = "BloodDecal";
         blood.transform.position = position + Vector3.down * 0.9f;
@@ -255,11 +237,9 @@ public class AlienEatSystem : MonoBehaviour
         Renderer renderer = blood.GetComponent<Renderer>();
         renderer.material.color = new Color(0.5f, 0f, 0f, 1f);
         
-        // Remove collider
         Collider col = blood.GetComponent<Collider>();
         if (col != null) Destroy(col);
         
-        // Auto-destroy after 30 seconds
         Destroy(blood, 30f);
     }
 }

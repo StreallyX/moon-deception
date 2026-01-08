@@ -3,6 +3,7 @@ using UnityEngine;
 /// <summary>
 /// Third-person controller for the Alien player.
 /// WASD movement with TPS camera that follows behind.
+/// A/D = STRAFE (move sideways), ONLY mouse rotates camera/character facing.
 /// </summary>
 public class AlienController : MonoBehaviour
 {
@@ -11,7 +12,7 @@ public class AlienController : MonoBehaviour
     public float rotationSpeed = 10f;
     
     [Header("TPS Camera")]
-    public Transform cameraTransform;
+    public Camera alienCamera;
     public Vector3 cameraOffset = new Vector3(0f, 2f, -4f);
     public float cameraSensitivity = 2f;
     public float minPitch = -30f;
@@ -21,12 +22,12 @@ public class AlienController : MonoBehaviour
     public HungerSystem hungerSystem;
     
     private CharacterController characterController;
+    private Transform cameraTransform;
     private float yaw = 0f;
     private float pitch = 20f;
     private float verticalVelocity = 0f;
     private float gravity = -19.62f;
     
-    // Static reference to track active controlled character
     public static AlienController ActiveAlien { get; private set; }
     public static bool IsAlienControlled => ActiveAlien != null && ActiveAlien.enabled;
     
@@ -43,6 +44,7 @@ public class AlienController : MonoBehaviour
         // FORCE CharacterController settings to prevent falling through ground
         characterController.skinWidth = 0.08f;
         characterController.stepOffset = 0.3f;
+        characterController.minMoveDistance = 0.001f;
         characterController.height = 2f;
         characterController.radius = 0.5f;
         characterController.center = new Vector3(0, 1f, 0);
@@ -50,9 +52,29 @@ public class AlienController : MonoBehaviour
     
     void Start()
     {
-        if (cameraTransform == null)
+        // Find alien camera if not assigned
+        if (alienCamera == null)
         {
-            cameraTransform = Camera.main?.transform;
+            // Look for a camera tagged or named for alien
+            Camera[] cameras = FindObjectsOfType<Camera>(true);
+            foreach (Camera cam in cameras)
+            {
+                if (cam.name.ToLower().Contains("alien"))
+                {
+                    alienCamera = cam;
+                    break;
+                }
+            }
+            // Fallback to main camera if no alien-specific camera
+            if (alienCamera == null)
+            {
+                alienCamera = Camera.main;
+            }
+        }
+        
+        if (alienCamera != null)
+        {
+            cameraTransform = alienCamera.transform;
         }
         
         if (hungerSystem == null)
@@ -71,6 +93,13 @@ public class AlienController : MonoBehaviour
         isControlled = true;
         Cursor.lockState = CursorLockMode.Locked;
         Cursor.visible = false;
+        
+        // Enable alien camera when alien is controlled
+        if (alienCamera != null)
+        {
+            alienCamera.gameObject.SetActive(true);
+        }
+        
         Debug.Log("[AlienController] Enabled - Alien is now controlled");
     }
     
@@ -81,12 +110,18 @@ public class AlienController : MonoBehaviour
             ActiveAlien = null;
         }
         isControlled = false;
+        
+        // Disable alien camera when not controlled
+        if (alienCamera != null)
+        {
+            alienCamera.gameObject.SetActive(false);
+        }
+        
         Debug.Log("[AlienController] Disabled - Alien control released");
     }
     
     void Update()
     {
-        // Only process input if this is the active controlled character
         if (!isControlled) return;
         
         HandleCameraRotation();
@@ -94,6 +129,10 @@ public class AlienController : MonoBehaviour
         UpdateCameraPosition();
     }
     
+    /// <summary>
+    /// ONLY mouse controls camera/character rotation.
+    /// A/D keys do NOT affect rotation - only strafe movement.
+    /// </summary>
     void HandleCameraRotation()
     {
         float mouseX = Input.GetAxis("Mouse X") * cameraSensitivity;
@@ -102,40 +141,36 @@ public class AlienController : MonoBehaviour
         yaw += mouseX;
         pitch -= mouseY;
         pitch = Mathf.Clamp(pitch, minPitch, maxPitch);
+        
+        // Rotate alien to face camera yaw direction (mouse controlled only)
+        transform.rotation = Quaternion.Euler(0, yaw, 0);
     }
     
+    /// <summary>
+    /// WASD movement relative to camera direction.
+    /// A/D = STRAFE (move sideways), W/S = forward/backward.
+    /// Character always faces camera direction (set by mouse).
+    /// </summary>
     void HandleMovement()
     {
-        // Get input
-        float horizontal = Input.GetAxisRaw("Horizontal");
-        float vertical = Input.GetAxisRaw("Vertical");
+        float horizontal = Input.GetAxisRaw("Horizontal"); // A/D = strafe
+        float vertical = Input.GetAxisRaw("Vertical");     // W/S = forward/back
         
-        // Calculate movement direction relative to camera yaw
-        Vector3 forward = Quaternion.Euler(0, yaw, 0) * Vector3.forward;
-        Vector3 right = Quaternion.Euler(0, yaw, 0) * Vector3.right;
-        Vector3 moveDirection = (forward * vertical + right * horizontal).normalized;
+        // Movement relative to where character is facing (which is camera yaw)
+        Vector3 moveDirection = transform.forward * vertical + transform.right * horizontal;
+        moveDirection = moveDirection.normalized;
         
-        // Rotate alien to face movement direction
-        if (moveDirection.magnitude > 0.1f)
-        {
-            Quaternion targetRotation = Quaternion.LookRotation(moveDirection);
-            transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, rotationSpeed * Time.deltaTime);
-        }
-        
-        // Ground check with small distance tolerance
-        bool isGrounded = characterController.isGrounded;
-        
-        // Apply gravity only when not grounded
-        if (isGrounded && verticalVelocity < 0)
-        {
-            verticalVelocity = -2f; // Small downward force to keep grounded
-        }
-        else
+        // Ground check and gravity
+        if (!characterController.isGrounded)
         {
             verticalVelocity += gravity * Time.deltaTime;
         }
+        else
+        {
+            verticalVelocity = -2f; // Small downward force to stay grounded
+        }
         
-        // Move
+        // Apply movement
         Vector3 velocity = moveDirection * moveSpeed + Vector3.up * verticalVelocity;
         characterController.Move(velocity * Time.deltaTime);
     }
@@ -144,7 +179,7 @@ public class AlienController : MonoBehaviour
     {
         if (cameraTransform == null) return;
         
-        // Calculate camera position based on yaw and pitch
+        // Calculate camera position based on yaw and pitch (orbiting behind character)
         Quaternion rotation = Quaternion.Euler(pitch, yaw, 0);
         Vector3 targetPosition = transform.position + Vector3.up * 1.5f + rotation * new Vector3(0, 0, cameraOffset.z);
         
@@ -153,20 +188,19 @@ public class AlienController : MonoBehaviour
         cameraTransform.LookAt(transform.position + Vector3.up * 1.5f);
     }
     
-    /// <summary>
-    /// Enable control of this alien
-    /// </summary>
     public void EnableControl()
     {
         enabled = true;
     }
     
-    /// <summary>
-    /// Disable control of this alien
-    /// </summary>
     public void DisableControl()
     {
         enabled = false;
+    }
+    
+    public Camera GetCamera()
+    {
+        return alienCamera;
     }
 
     public void Transform()

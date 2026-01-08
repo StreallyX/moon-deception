@@ -5,12 +5,15 @@ public class PlayerMovement : MonoBehaviour
 {
     [Header("Movement Settings")]
     public float walkSpeed = 5f;
-    public float gravity = -19.62f; // Stronger gravity for better ground feel
+    public float gravity = -19.62f;
     public float jumpHeight = 1.5f;
 
     [Header("Mouse Look Settings")]
     public float mouseSensitivity = 2f;
     public Transform cameraTransform;
+    
+    [Header("Camera Reference")]
+    public Camera playerCamera;
     
     [Header("Ground Check")]
     public float groundCheckDistance = 0.2f;
@@ -18,33 +21,45 @@ public class PlayerMovement : MonoBehaviour
     private CharacterController controller;
     private Vector3 velocity;
     private float xRotation = 0f;
-    private bool isGrounded;
     
-    // Static reference to track active player
     public static PlayerMovement ActivePlayer { get; private set; }
     public static bool IsPlayerControlled => ActivePlayer != null && ActivePlayer.enabled;
     
     private bool isControlled = false;
 
-    void Start()
+    void Awake()
     {
         controller = GetComponent<CharacterController>();
         
-        // Ensure CharacterController has correct settings for ground collision
+        // FORCE CharacterController settings to prevent falling through ground
         controller.skinWidth = 0.08f;
         controller.stepOffset = 0.3f;
+        controller.minMoveDistance = 0.001f;
+    }
 
+    void Start()
+    {
         // Auto-find camera if not assigned
         if (cameraTransform == null)
         {
             Camera cam = GetComponentInChildren<Camera>();
             if (cam != null)
+            {
                 cameraTransform = cam.transform;
-            else
+                playerCamera = cam;
+            }
+            else if (Camera.main != null)
+            {
                 cameraTransform = Camera.main.transform;
+                playerCamera = Camera.main;
+            }
+        }
+        else if (playerCamera == null)
+        {
+            playerCamera = cameraTransform.GetComponent<Camera>();
         }
         
-        Debug.Log($"[PlayerMovement] Initialized. Camera: {cameraTransform?.name}, Controller grounded: {controller.isGrounded}");
+        Debug.Log($"[PlayerMovement] Initialized. Camera: {cameraTransform?.name}");
     }
     
     void OnEnable()
@@ -53,6 +68,13 @@ public class PlayerMovement : MonoBehaviour
         isControlled = true;
         Cursor.lockState = CursorLockMode.Locked;
         Cursor.visible = false;
+        
+        // Enable player camera when player is controlled
+        if (playerCamera != null)
+        {
+            playerCamera.gameObject.SetActive(true);
+        }
+        
         Debug.Log("[PlayerMovement] Enabled - Player is now controlled");
     }
     
@@ -63,12 +85,18 @@ public class PlayerMovement : MonoBehaviour
             ActivePlayer = null;
         }
         isControlled = false;
+        
+        // Disable player camera when not controlled
+        if (playerCamera != null)
+        {
+            playerCamera.gameObject.SetActive(false);
+        }
+        
         Debug.Log("[PlayerMovement] Disabled - Player control released");
     }
 
     void Update()
     {
-        // Only process input if this is the active controlled character
         if (!isControlled) return;
         
         HandleMouseLook();
@@ -77,34 +105,20 @@ public class PlayerMovement : MonoBehaviour
         ApplyGravity();
     }
 
-    /// <summary>
-    /// FPS Mouse Look:
-    /// - Player body (this transform) rotates on Y axis (horizontal/yaw)
-    /// - Camera rotates ONLY on local X axis (vertical/pitch) - NO Y rotation!
-    /// - Camera is child of player, stays at eye position, only tilts up/down
-    /// </summary>
     void HandleMouseLook()
     {
         float mouseX = Input.GetAxis("Mouse X") * mouseSensitivity;
         float mouseY = Input.GetAxis("Mouse Y") * mouseSensitivity;
 
-        // Vertical look (pitch) - camera only, clamped
         xRotation -= mouseY;
         xRotation = Mathf.Clamp(xRotation, -90f, 90f);
         
-        // Camera rotates ONLY on X axis (pitch), never Y
-        // This prevents the "orbiting" feel - camera stays fixed at eye position
         cameraTransform.localRotation = Quaternion.Euler(xRotation, 0f, 0f);
-        
-        // Horizontal look (yaw) - rotate entire player body
         transform.Rotate(Vector3.up * mouseX);
     }
 
     void HandleMovement()
     {
-        // Check grounded state
-        isGrounded = controller.isGrounded;
-
         float moveX = Input.GetAxis("Horizontal");
         float moveZ = Input.GetAxis("Vertical");
 
@@ -114,7 +128,7 @@ public class PlayerMovement : MonoBehaviour
 
     void HandleJump()
     {
-        if (Input.GetButtonDown("Jump") && isGrounded)
+        if (Input.GetButtonDown("Jump") && controller.isGrounded)
         {
             velocity.y = Mathf.Sqrt(jumpHeight * -2f * gravity);
         }
@@ -122,34 +136,30 @@ public class PlayerMovement : MonoBehaviour
 
     void ApplyGravity()
     {
-        // Reset vertical velocity when grounded to prevent accumulation
-        if (isGrounded && velocity.y < 0)
-        {
-            velocity.y = -2f; // Small downward force to keep grounded
-        }
-        
-        // Only apply gravity when NOT grounded
-        if (!isGrounded)
+        if (!controller.isGrounded)
         {
             velocity.y += gravity * Time.deltaTime;
+        }
+        else
+        {
+            velocity.y = -2f; // Small downward force to stay grounded
         }
         
         controller.Move(velocity * Time.deltaTime);
     }
     
-    /// <summary>
-    /// Enable control of this player
-    /// </summary>
     public void EnableControl()
     {
         enabled = true;
     }
     
-    /// <summary>
-    /// Disable control of this player
-    /// </summary>
     public void DisableControl()
     {
         enabled = false;
+    }
+    
+    public Camera GetCamera()
+    {
+        return playerCamera;
     }
 }
