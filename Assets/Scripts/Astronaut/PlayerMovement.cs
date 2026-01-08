@@ -5,7 +5,8 @@ public class PlayerMovement : MonoBehaviour
 {
     [Header("Movement Settings")]
     public float walkSpeed = 5f;
-    public float gravity = -19.62f;
+    public float gravity = -9.81f;
+    public float groundedGravity = -2f;
     public float jumpHeight = 1.5f;
 
     [Header("Mouse Look Settings")]
@@ -15,8 +16,8 @@ public class PlayerMovement : MonoBehaviour
     [Header("Camera Reference")]
     public Camera playerCamera;
     
-    [Header("Ground Check")]
-    public float groundCheckDistance = 0.2f;
+    [Header("Debug")]
+    public bool showDebugLogs = true;
 
     private CharacterController controller;
     private Vector3 velocity;
@@ -35,6 +36,9 @@ public class PlayerMovement : MonoBehaviour
         controller.skinWidth = 0.08f;
         controller.stepOffset = 0.3f;
         controller.minMoveDistance = 0.001f;
+        controller.height = 2f;
+        controller.radius = 0.5f;
+        controller.center = new Vector3(0, 1f, 0);
     }
 
     void Start()
@@ -59,6 +63,7 @@ public class PlayerMovement : MonoBehaviour
             playerCamera = cameraTransform.GetComponent<Camera>();
         }
         
+        velocity = Vector3.zero;
         Debug.Log($"[PlayerMovement] Initialized. Camera: {cameraTransform?.name}");
     }
     
@@ -99,10 +104,40 @@ public class PlayerMovement : MonoBehaviour
     {
         if (!isControlled) return;
         
+        // === PROVEN CHARATERCONTROLLER PATTERN ===
+        
+        // 1. Ground check - reset velocity.y when grounded AND falling
+        if (controller.isGrounded && velocity.y < 0)
+        {
+            velocity.y = groundedGravity; // Small downward force to stay grounded
+        }
+        
+        // 2. Handle mouse look
         HandleMouseLook();
-        HandleMovement();
-        HandleJump();
-        ApplyGravity();
+        
+        // 3. Horizontal movement ONLY
+        float moveX = Input.GetAxis("Horizontal");
+        float moveZ = Input.GetAxis("Vertical");
+        Vector3 move = transform.right * moveX + transform.forward * moveZ;
+        controller.Move(move * walkSpeed * Time.deltaTime);
+        
+        // 4. Jump (only when grounded)
+        if (Input.GetButtonDown("Jump") && controller.isGrounded)
+        {
+            velocity.y = Mathf.Sqrt(jumpHeight * -2f * gravity);
+        }
+        
+        // 5. Apply gravity every frame
+        velocity.y += gravity * Time.deltaTime;
+        
+        // 6. Apply vertical movement SEPARATELY
+        controller.Move(velocity * Time.deltaTime);
+        
+        // Debug logging
+        if (showDebugLogs && Time.frameCount % 60 == 0)
+        {
+            Debug.Log($"[Player] isGrounded={controller.isGrounded}, velocity.y={velocity.y:F2}, pos.y={transform.position.y:F2}");
+        }
     }
 
     void HandleMouseLook()
@@ -115,37 +150,6 @@ public class PlayerMovement : MonoBehaviour
         
         cameraTransform.localRotation = Quaternion.Euler(xRotation, 0f, 0f);
         transform.Rotate(Vector3.up * mouseX);
-    }
-
-    void HandleMovement()
-    {
-        float moveX = Input.GetAxis("Horizontal");
-        float moveZ = Input.GetAxis("Vertical");
-
-        Vector3 move = transform.right * moveX + transform.forward * moveZ;
-        controller.Move(move * walkSpeed * Time.deltaTime);
-    }
-
-    void HandleJump()
-    {
-        if (Input.GetButtonDown("Jump") && controller.isGrounded)
-        {
-            velocity.y = Mathf.Sqrt(jumpHeight * -2f * gravity);
-        }
-    }
-
-    void ApplyGravity()
-    {
-        if (!controller.isGrounded)
-        {
-            velocity.y += gravity * Time.deltaTime;
-        }
-        else
-        {
-            velocity.y = -2f; // Small downward force to stay grounded
-        }
-        
-        controller.Move(velocity * Time.deltaTime);
     }
     
     public void EnableControl()

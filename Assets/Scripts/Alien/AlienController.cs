@@ -11,6 +11,10 @@ public class AlienController : MonoBehaviour
     public float moveSpeed = 5f;
     public float rotationSpeed = 10f;
     
+    [Header("Gravity")]
+    public float gravity = -9.81f;
+    public float groundedGravity = -2f;
+    
     [Header("TPS Camera")]
     public Camera alienCamera;
     public Vector3 cameraOffset = new Vector3(0f, 2f, -4f);
@@ -21,12 +25,14 @@ public class AlienController : MonoBehaviour
     [Header("References")]
     public HungerSystem hungerSystem;
     
+    [Header("Debug")]
+    public bool showDebugLogs = true;
+    
     private CharacterController characterController;
     private Transform cameraTransform;
     private float yaw = 0f;
     private float pitch = 20f;
-    private float verticalVelocity = 0f;
-    private float gravity = -19.62f;
+    private Vector3 velocity;
     
     public static AlienController ActiveAlien { get; private set; }
     public static bool IsAlienControlled => ActiveAlien != null && ActiveAlien.enabled;
@@ -83,6 +89,7 @@ public class AlienController : MonoBehaviour
         }
         
         yaw = transform.eulerAngles.y;
+        velocity = Vector3.zero;
         
         Debug.Log("[AlienController] Initialized");
     }
@@ -124,9 +131,39 @@ public class AlienController : MonoBehaviour
     {
         if (!isControlled) return;
         
+        // === PROVEN CHARATERCONTROLLER PATTERN ===
+        
+        // 1. Ground check - reset velocity.y when grounded AND falling
+        if (characterController.isGrounded && velocity.y < 0)
+        {
+            velocity.y = groundedGravity; // Small downward force to stay grounded
+        }
+        
+        // 2. Handle camera rotation (mouse only)
         HandleCameraRotation();
-        HandleMovement();
+        
+        // 3. Horizontal movement ONLY
+        float horizontal = Input.GetAxisRaw("Horizontal"); // A/D = strafe
+        float vertical = Input.GetAxisRaw("Vertical");     // W/S = forward/back
+        
+        Vector3 move = transform.forward * vertical + transform.right * horizontal;
+        move = move.normalized;
+        characterController.Move(move * moveSpeed * Time.deltaTime);
+        
+        // 4. Apply gravity every frame
+        velocity.y += gravity * Time.deltaTime;
+        
+        // 5. Apply vertical movement SEPARATELY
+        characterController.Move(velocity * Time.deltaTime);
+        
+        // 6. Update camera position
         UpdateCameraPosition();
+        
+        // Debug logging
+        if (showDebugLogs && Time.frameCount % 60 == 0)
+        {
+            Debug.Log($"[Alien] isGrounded={characterController.isGrounded}, velocity.y={velocity.y:F2}, pos.y={transform.position.y:F2}");
+        }
     }
     
     /// <summary>
@@ -144,35 +181,6 @@ public class AlienController : MonoBehaviour
         
         // Rotate alien to face camera yaw direction (mouse controlled only)
         transform.rotation = Quaternion.Euler(0, yaw, 0);
-    }
-    
-    /// <summary>
-    /// WASD movement relative to camera direction.
-    /// A/D = STRAFE (move sideways), W/S = forward/backward.
-    /// Character always faces camera direction (set by mouse).
-    /// </summary>
-    void HandleMovement()
-    {
-        float horizontal = Input.GetAxisRaw("Horizontal"); // A/D = strafe
-        float vertical = Input.GetAxisRaw("Vertical");     // W/S = forward/back
-        
-        // Movement relative to where character is facing (which is camera yaw)
-        Vector3 moveDirection = transform.forward * vertical + transform.right * horizontal;
-        moveDirection = moveDirection.normalized;
-        
-        // Ground check and gravity
-        if (!characterController.isGrounded)
-        {
-            verticalVelocity += gravity * Time.deltaTime;
-        }
-        else
-        {
-            verticalVelocity = -2f; // Small downward force to stay grounded
-        }
-        
-        // Apply movement
-        Vector3 velocity = moveDirection * moveSpeed + Vector3.up * verticalVelocity;
-        characterController.Move(velocity * Time.deltaTime);
     }
     
     void UpdateCameraPosition()
