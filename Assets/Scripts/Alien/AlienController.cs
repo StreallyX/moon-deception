@@ -147,17 +147,17 @@ public class AlienController : MonoBehaviour
         move = move.normalized;
         characterController.Move(move * moveSpeed * Time.deltaTime);
         
-        // 3. Jump (only when grounded)
+        // 3. Jump FIRST (before grounded check resets velocity)
         if (Input.GetButtonDown("Jump") && characterController.isGrounded)
         {
             velocity.y = Mathf.Sqrt(jumpHeight * -2f * gravity);
+            Debug.Log("JUMP!");
         }
         
-        // 4. Gravity - ONLY apply when NOT grounded
+        // 4. Gravity - ALWAYS reset when grounded, no condition
         if (characterController.isGrounded)
         {
-            if (velocity.y < 0)
-                velocity.y = -2f; // stick to ground without sinking
+            velocity.y = -2f; // ALWAYS reset when grounded
         }
         else
         {

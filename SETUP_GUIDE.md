@@ -26,9 +26,9 @@ Follow the detailed steps below.
 
 1. **Create Player GameObject**
    - `GameObject > Create Empty` → name it `Player`
-   - ⚠️ **SPAWN POSITION RULE: Y >= height/2** (e.g., Y = 1.05 for height 2)
-   - The CharacterController center is at (0, 1, 0), so spawn at Y=1.05 puts feet just above ground
-   - Position: `(0, 1.05, 0)` — ensures proper ground collision detection on first frame
+   - ⚠️ **SPAWN POSITION RULE**: If ground is at Y=0 with scale Y=1, character spawn should be Y = 1 + (height/2) = **2**
+   - The CharacterController height=2 with center at (0, 1, 0), so spawn Y=2 keeps feet at ground level
+   - Position: `(0, 2, 0)` — ensures proper ground collision detection on first frame
 
 2. **Add Visible Mesh to Player** ⚠️ NEW
    - `GameObject > 3D Object > Capsule` as **child** of Player
