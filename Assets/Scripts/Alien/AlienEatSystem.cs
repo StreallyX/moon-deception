@@ -187,10 +187,13 @@ public class AlienEatSystem : MonoBehaviour
         NPCBehavior npc = target.GetComponent<NPCBehavior>();
         if (npc != null)
         {
-            GameManager gm = FindObjectOfType<GameManager>();
-            if (gm != null)
+            if (npc != null)
             {
-                gm.OnNPCKilled();
+                GameManager gm = FindObjectOfType<GameManager>();
+                if (gm != null)
+                {
+                    gm.OnNPCKilled(npc);
+                }
             }
         }
         

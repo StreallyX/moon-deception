@@ -121,4 +121,15 @@ public class AlienController : MonoBehaviour
         cameraTransform.position = Vector3.Lerp(cameraTransform.position, targetPosition, 10f * Time.deltaTime);
         cameraTransform.LookAt(transform.position + Vector3.up * 1.5f);
     }
+
+    public void Transform()
+    {
+        Debug.Log("[AlienController] Alien transforming!");
+
+        // Exemple :
+        // - changer de mesh
+        // - augmenter la vitesse
+        // - activer des capacités
+        // - passer en mode chaos
+    }
 }
