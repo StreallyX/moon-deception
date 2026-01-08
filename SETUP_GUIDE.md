@@ -34,6 +34,10 @@ Follow the detailed steps below.
      - Height: `2`
      - Radius: `0.5`
      - Center: `(0, 1, 0)`
+     - **Skin Width: `0.08`** ⚠️ Critical for ground collision!
+     - **Step Offset: `0.3`**
+     - Slope Limit: `45`
+     - Min Move Distance: `0.001`
    - `Add Component > PlayerMovement`
    - `Add Component > PlayerShooting`
    - `Add Component > StressSystem`
@@ -150,7 +154,17 @@ Follow the detailed steps below.
 - Ensure ground has a `Collider` component
 - Check `CharacterController` height and center
 - ⚠️ **Set Player Y position to 2 or higher** — The CharacterController center is offset by (0, 1, 0), so if Player is at Y=0, the feet will be at Y=0 (inside ground)
+- **CRITICAL: Set Skin Width to 0.08** — Default 0.01 is too small and causes clipping!
+- **Set Step Offset to 0.3** — Must be less than Height/2
 - If using the scene from the repo, select Player in hierarchy and set Transform Position Y = 2
+
+### Camera feels like TPS / orbits around player
+- Camera must be a **child** of the Player GameObject
+- Camera local position should be `(0, 1.6, 0)` — at eye level
+- Camera local rotation must be `(0, 0, 0)` initially
+- **Camera should NOT have any rotation scripts** — only PlayerMovement controls it
+- In PlayerMovement, the camera only rotates on LOCAL X axis (pitch), never Y
+- The player body rotates on Y axis (yaw) for horizontal mouse movement
 
 ### No crosshair visible
 - Add the `SimpleCrosshair` script to any GameObject (e.g., Player or MainCamera)
