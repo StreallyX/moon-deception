@@ -13,7 +13,7 @@ public class AlienController : MonoBehaviour
     
     [Header("Gravity")]
     public float gravity = -9.81f;
-    public float groundedGravity = -2f;
+    public float jumpHeight = 1.5f;
     
     [Header("TPS Camera")]
     public Camera alienCamera;
@@ -91,6 +91,9 @@ public class AlienController : MonoBehaviour
         yaw = transform.eulerAngles.y;
         velocity = Vector3.zero;
         
+        // Force Unity to resolve collision on first frame
+        characterController.Move(Vector3.down * 0.5f);
+        
         Debug.Log("[AlienController] Initialized");
     }
     
@@ -131,18 +134,12 @@ public class AlienController : MonoBehaviour
     {
         if (!isControlled) return;
         
-        // === PROVEN CHARATERCONTROLLER PATTERN ===
+        // === FIXED GROUND COLLISION PATTERN ===
         
-        // 1. Ground check - reset velocity.y when grounded AND falling
-        if (characterController.isGrounded && velocity.y < 0)
-        {
-            velocity.y = groundedGravity; // Small downward force to stay grounded
-        }
-        
-        // 2. Handle camera rotation (mouse only)
+        // 1. Handle camera rotation (mouse only)
         HandleCameraRotation();
         
-        // 3. Horizontal movement ONLY
+        // 2. Horizontal movement
         float horizontal = Input.GetAxisRaw("Horizontal"); // A/D = strafe
         float vertical = Input.GetAxisRaw("Vertical");     // W/S = forward/back
         
@@ -150,10 +147,24 @@ public class AlienController : MonoBehaviour
         move = move.normalized;
         characterController.Move(move * moveSpeed * Time.deltaTime);
         
-        // 4. Apply gravity every frame
-        velocity.y += gravity * Time.deltaTime;
+        // 3. Jump (only when grounded)
+        if (Input.GetButtonDown("Jump") && characterController.isGrounded)
+        {
+            velocity.y = Mathf.Sqrt(jumpHeight * -2f * gravity);
+        }
         
-        // 5. Apply vertical movement SEPARATELY
+        // 4. Gravity - ONLY apply when NOT grounded
+        if (characterController.isGrounded)
+        {
+            if (velocity.y < 0)
+                velocity.y = -2f; // stick to ground without sinking
+        }
+        else
+        {
+            velocity.y += gravity * Time.deltaTime;
+        }
+        
+        // 5. Apply vertical movement
         characterController.Move(velocity * Time.deltaTime);
         
         // 6. Update camera position

@@ -26,8 +26,9 @@ Follow the detailed steps below.
 
 1. **Create Player GameObject**
    - `GameObject > Create Empty` → name it `Player`
-   - ⚠️ **IMPORTANT: Position: `(0, 2, 0)`** — Player must spawn ABOVE ground, not inside it!
-   - The CharacterController center is at (0, 1, 0), so total player center will be at Y=3
+   - ⚠️ **SPAWN POSITION RULE: Y >= height/2** (e.g., Y = 1.05 for height 2)
+   - The CharacterController center is at (0, 1, 0), so spawn at Y=1.05 puts feet just above ground
+   - Position: `(0, 1.05, 0)` — ensures proper ground collision detection on first frame
 
 2. **Add Visible Mesh to Player** ⚠️ NEW
    - `GameObject > 3D Object > Capsule` as **child** of Player
@@ -160,10 +161,10 @@ Follow the detailed steps below.
 ### Player falls through floor / feels inside ground
 - Ensure ground has a `Collider` component
 - Check `CharacterController` height and center
-- ⚠️ **Set Player Y position to 2 or higher** — The CharacterController center is offset by (0, 1, 0), so if Player is at Y=0, the feet will be at Y=0 (inside ground)
+- ⚠️ **SPAWN POSITION RULE: Y >= height/2** (e.g., Y = 1.05 for CharacterController height 2)
 - **CRITICAL: Set Skin Width to 0.08** — Default 0.01 is too small and causes clipping!
 - **Set Step Offset to 0.3** — Must be less than Height/2
-- If using the scene from the repo, select Player in hierarchy and set Transform Position Y = 2
+- Scripts now call `controller.Move(Vector3.down * 0.5f)` in Start() to snap to ground
 
 ### Camera feels like TPS / orbits around player
 - Camera must be a **child** of the Player GameObject
@@ -241,7 +242,7 @@ NPCBehavior
 
 1. **Create Alien GameObject**
    - `GameObject > 3D Object > Capsule` → name it `Alien`
-   - Position: `(5, 2, 5)` — away from astronaut spawn
+   - Position: `(5, 1.05, 5)` — Y >= height/2 for proper ground collision
    - Tag: `Alien`
    - Layer: `Alien`
 

@@ -6,7 +6,6 @@ public class PlayerMovement : MonoBehaviour
     [Header("Movement Settings")]
     public float walkSpeed = 5f;
     public float gravity = -9.81f;
-    public float groundedGravity = -2f;
     public float jumpHeight = 1.5f;
 
     [Header("Mouse Look Settings")]
@@ -64,6 +63,10 @@ public class PlayerMovement : MonoBehaviour
         }
         
         velocity = Vector3.zero;
+        
+        // Force Unity to resolve collision on first frame
+        controller.Move(Vector3.down * 0.5f);
+        
         Debug.Log($"[PlayerMovement] Initialized. Camera: {cameraTransform?.name}");
     }
     
@@ -104,33 +107,35 @@ public class PlayerMovement : MonoBehaviour
     {
         if (!isControlled) return;
         
-        // === PROVEN CHARATERCONTROLLER PATTERN ===
+        // === FIXED GROUND COLLISION PATTERN ===
         
-        // 1. Ground check - reset velocity.y when grounded AND falling
-        if (controller.isGrounded && velocity.y < 0)
-        {
-            velocity.y = groundedGravity; // Small downward force to stay grounded
-        }
-        
-        // 2. Handle mouse look
+        // 1. Handle mouse look
         HandleMouseLook();
         
-        // 3. Horizontal movement ONLY
+        // 2. Horizontal movement
         float moveX = Input.GetAxis("Horizontal");
         float moveZ = Input.GetAxis("Vertical");
         Vector3 move = transform.right * moveX + transform.forward * moveZ;
         controller.Move(move * walkSpeed * Time.deltaTime);
         
-        // 4. Jump (only when grounded)
+        // 3. Jump (only when grounded)
         if (Input.GetButtonDown("Jump") && controller.isGrounded)
         {
             velocity.y = Mathf.Sqrt(jumpHeight * -2f * gravity);
         }
         
-        // 5. Apply gravity every frame
-        velocity.y += gravity * Time.deltaTime;
+        // 4. Gravity - ONLY apply when NOT grounded
+        if (controller.isGrounded)
+        {
+            if (velocity.y < 0)
+                velocity.y = -2f; // stick to ground without sinking
+        }
+        else
+        {
+            velocity.y += gravity * Time.deltaTime;
+        }
         
-        // 6. Apply vertical movement SEPARATELY
+        // 5. Apply vertical movement
         controller.Move(velocity * Time.deltaTime);
         
         // Debug logging
