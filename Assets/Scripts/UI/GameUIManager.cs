@@ -1,4 +1,4 @@
-using UnityEngine;
+﻿using UnityEngine;
 using UnityEngine.UI;
 
 public enum PlayerType
@@ -131,6 +131,7 @@ public class GameUIManager : MonoBehaviour
             "HUNGER",
             hungerBarBackgroundColor
         );
+        hungerSlider.direction = Slider.Direction.RightToLeft;
     }
     
     GameObject CreateStyledBar(
@@ -191,7 +192,7 @@ public class GameUIManager : MonoBehaviour
         slider.maxValue = 100;
         slider.value = 100;
         slider.interactable = false;
-        
+
         GameObject background = new GameObject("Background");
         background.transform.SetParent(sliderObj.transform, false);
         RectTransform bgRect = background.AddComponent<RectTransform>();
@@ -200,9 +201,16 @@ public class GameUIManager : MonoBehaviour
         bgRect.sizeDelta = Vector2.zero;
         
         backgroundImage = background.AddComponent<Image>();
-        backgroundImage.color = bgColor;
+        backgroundImage.color = new Color(bgColor.r, bgColor.g, bgColor.b, 1f); // opaque
         backgroundImage.type = Image.Type.Sliced;
-        
+
+        Outline bgOutline = background.AddComponent<Outline>();
+        bgOutline.effectColor = Color.black;
+        bgOutline.effectDistance = new Vector2(2, -2);
+
+
+
+
         GameObject fillArea = new GameObject("Fill Area");
         fillArea.transform.SetParent(sliderObj.transform, false);
         RectTransform fillAreaRect = fillArea.AddComponent<RectTransform>();
@@ -210,24 +218,31 @@ public class GameUIManager : MonoBehaviour
         fillAreaRect.anchorMax = Vector2.one;
         fillAreaRect.sizeDelta = new Vector2(-10, -10);
         fillAreaRect.anchoredPosition = Vector2.zero;
-        
+
         GameObject fill = new GameObject("Fill");
-        fill.transform.SetParent(fillArea.transform, false);
+        fill.transform.SetParent(sliderObj.transform, false);
+
         RectTransform fillRect = fill.AddComponent<RectTransform>();
-        fillRect.anchorMin = Vector2.zero;
-        fillRect.anchorMax = Vector2.one;
+        fillRect.anchorMin = new Vector2(0, 0);
+        fillRect.anchorMax = new Vector2(1, 1);
+        fillRect.pivot = new Vector2(0, 0.5f);
+        fillRect.anchoredPosition = Vector2.zero;
         fillRect.sizeDelta = Vector2.zero;
-        
+        fillRect.offsetMin = new Vector2(3, 3);
+        fillRect.offsetMax = new Vector2(-3, -3);
+
+
         fillImage = fill.AddComponent<Image>();
         fillImage.color = Color.green;
-        fillImage.type = Image.Type.Filled;
-        fillImage.fillMethod = Image.FillMethod.Horizontal;
-        fillImage.fillOrigin = (int)Image.OriginHorizontal.Right;
-        fillImage.fillAmount = 1f;
+        fillImage.type = Image.Type.Simple;
 
+        // ✅ MAINTENANT seulement
         slider.fillRect = fillRect;
         slider.targetGraphic = fillImage;
-        
+        slider.direction = Slider.Direction.LeftToRight;
+
+
+
         return panel;
     }
     
@@ -339,36 +354,25 @@ public class GameUIManager : MonoBehaviour
     
     public void UpdateStressBar(float value, float maxValue)
     {
-        if (stressSlider != null)
+        if (stressBarFill != null)
         {
+            float percent = value / maxValue;
             stressSlider.maxValue = maxValue;
             stressSlider.value = value;
-
-            float percent = value / maxValue;
-            if (stressBarFill != null)
-            {
-                stressBarFill.fillAmount = percent;
-                stressBarFill.color = Color.Lerp(Color.green, Color.red, percent);
-            }
+            stressBarFill.color = Color.Lerp(Color.green, Color.red, percent);
         }
     }
-    
+
     public void UpdateHungerBar(float value, float maxValue)
     {
-        if (hungerSlider != null)
-        {
-            hungerSlider.maxValue = maxValue;
-            hungerSlider.value = value;
+        hungerSlider.maxValue = maxValue;
+        hungerSlider.value = value;
 
-            float percent = value / maxValue;
-            if (hungerBarFill != null)
-            {
-                hungerBarFill.fillAmount = percent;
-                hungerBarFill.color = Color.Lerp(Color.red, Color.green, percent);
-            }
-        }
+        float percent = value / maxValue;
+        hungerBarFill.color = Color.Lerp(Color.red, Color.green, percent);
     }
-    
+
+
     public Slider GetStressSlider() => stressSlider;
     public Slider GetHungerSlider() => hungerSlider;
     public Image GetStressBarFill() => stressBarFill;
