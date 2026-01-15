@@ -1,7 +1,8 @@
 # Moon Deception - Development Tracker
 
-## Current Phase: 1 - Solo Astronaut (FPS)
+## Current Phase: 2 - Solo Alien (TPS) - COMPLETE ✅
 ## Current Branch: phase1-fps
+## Next: Phase 3 - Map & Gameplay Loop
 
 ---
 
@@ -129,11 +130,29 @@
 - Created CLAUDE.md for future Claude Code sessions
 - **All Phase 2 bugs fixed** - ready for testing
 
+### Session 4 (2026-01-15)
+- **Fixed alien not taking damage**: Raycast was hitting child mesh, added GetComponentInParent<>() fallback in PlayerShooting.cs
+- **Added magazine reload system**: 8 rounds per magazine, 1.5s reload time, visual reload indicator
+- **Added minigun upgrade**: DefenseZone gives infinite ammo, no reload, faster fire rate
+- **Fixed chaos mode UI**:
+  - HungerSystem OnGUI now checks `if (!enabled) return;` to properly hide
+  - AlienTransformation now disables HungerSystem and calls SetChaosMode(true)
+  - HP boost from 100 to 200 during chaos phase
+- **Fixed chaos phase not triggering**:
+  - GameManager now subscribes to StressSystem.OnStressMaxed AFTER StartGame()
+  - AlienTransformation uses LateSubscribe() coroutine for timing issues
+- **Fixed health bar not updating**: AlienHealth.UpdateUI() now always updates regardless of control state
+- **Fixed CharacterController collision**: Set center to (0,1,0) for proper raycast detection
+- **Added auto-loading audio**: AudioManager.LoadAudioFromResources() loads from Assets/Resources/Audio/
+- Created AUDIO_GUIDE.md with sound requirements and folder structure
+- Updated CLAUDE.md with comprehensive project documentation
+- **All bugs fixed and verified working**
+
 ---
 
 ## Known Issues
 - SimpleCrosshair uses OnGUI (old system) - consider switching to UI Canvas
-- GameUIManager health bars created but UpdateAstronautHealthBar not connected
+- ~~GameUIManager health bars created but UpdateAstronautHealthBar not connected~~ **FIXED in Session 4**
 
 ---
 
