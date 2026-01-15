@@ -91,13 +91,13 @@ public class GameUIManager : MonoBehaviour
         containerRect.anchorMin = new Vector2(0, 1);
         containerRect.anchorMax = new Vector2(0, 1);
         containerRect.pivot = new Vector2(0, 1);
-        containerRect.anchoredPosition = new Vector2(20, -40);
-        containerRect.sizeDelta = new Vector2(300, 80);
+        containerRect.anchoredPosition = new Vector2(20, -20);
+        containerRect.sizeDelta = new Vector2(300, 50);
 
         stressBarPanel = CreateStyledBar(
             astronautUIContainer.transform,
             "StressBarPanel",
-            new Vector2(50, 50),
+            new Vector2(0, -10),
             new Vector2(300, 40),
             out stressSlider,
             out stressBarFill,
@@ -122,7 +122,7 @@ public class GameUIManager : MonoBehaviour
         hungerBarPanel = CreateStyledBar(
             alienUIContainer.transform,
             "HungerBarPanel",
-            new Vector2(50, 50),
+            new Vector2(0, -10),
             new Vector2(300, 40),
             out hungerSlider,
             out hungerBarFill,

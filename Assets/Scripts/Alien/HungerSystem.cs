@@ -69,7 +69,8 @@ public class HungerSystem : MonoBehaviour
                 }
             );
         }
-        
+
+        UpdateUI();
         Debug.Log("[HungerSystem] Initialized");
     }
     
