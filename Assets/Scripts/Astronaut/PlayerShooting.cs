@@ -3,11 +3,17 @@ using System.Collections;
 
 public class PlayerShooting : MonoBehaviour
 {
-    [Header("Shooting Settings")]
+    [Header("Weapon Settings")]
     public float range = 100f;
     public float damage = 25f;
     public LayerMask hitLayers = ~0;
     public float fireRate = 0.15f;
+
+    [Header("Magazine & Reload")]
+    public int magazineSize = 8;
+    public int currentAmmo = 8;
+    public float reloadTime = 1.5f;
+    public bool infiniteAmmo = false;
 
     [Header("Visual Effects")]
     public ParticleSystem muzzleFlash;
@@ -38,9 +44,19 @@ public class PlayerShooting : MonoBehaviour
     private Color currentHitMarkerColor;
     private Texture2D hitMarkerTexture;
 
+    // Reload state
+    private bool isReloading = false;
+    private float reloadProgress = 0f;
+    private string weaponName = "PISTOL";
+
+    // Events for UI
+    public System.Action<int, int> OnAmmoChanged;
+    public System.Action<float> OnReloadProgress;
+
     void Start()
     {
         playerCamera = Camera.main;
+        currentAmmo = magazineSize;
 
         debugLineRenderer = gameObject.AddComponent<LineRenderer>();
         debugLineRenderer.startWidth = 0.02f;
@@ -65,7 +81,6 @@ public class PlayerShooting : MonoBehaviour
         muzzleObj.transform.SetParent(playerCamera.transform);
         muzzleObj.transform.localPosition = new Vector3(0.3f, -0.2f, 0.5f);
 
-        // Stop the default particle system first before configuring
         muzzleFlash = muzzleObj.AddComponent<ParticleSystem>();
         muzzleFlash.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
 
@@ -99,15 +114,73 @@ public class PlayerShooting : MonoBehaviour
 
     void Update()
     {
+        // Don't shoot while reloading
+        if (isReloading) return;
+
+        // Manual reload with R
+        if (Input.GetKeyDown(KeyCode.R) && currentAmmo < magazineSize && !infiniteAmmo)
+        {
+            StartCoroutine(Reload());
+            return;
+        }
+
+        // Shoot
         if (Input.GetButton("Fire1") && Time.time >= nextFireTime)
         {
-            Shoot();
-            nextFireTime = Time.time + fireRate;
+            if (currentAmmo > 0 || infiniteAmmo)
+            {
+                Shoot();
+                nextFireTime = Time.time + fireRate;
+            }
+            else
+            {
+                // Auto reload when empty
+                StartCoroutine(Reload());
+            }
         }
+    }
+
+    IEnumerator Reload()
+    {
+        if (isReloading || currentAmmo >= magazineSize) yield break;
+
+        isReloading = true;
+        reloadProgress = 0f;
+
+        Debug.Log($"[PlayerShooting] Reloading {weaponName}...");
+
+        // Play reload sound
+        if (AudioManager.Instance != null)
+        {
+            AudioManager.Instance.PlayUIClick(); // Placeholder for reload sound
+        }
+
+        float elapsed = 0f;
+        while (elapsed < reloadTime)
+        {
+            elapsed += Time.deltaTime;
+            reloadProgress = elapsed / reloadTime;
+            OnReloadProgress?.Invoke(reloadProgress);
+            yield return null;
+        }
+
+        currentAmmo = magazineSize;
+        isReloading = false;
+        reloadProgress = 0f;
+
+        OnAmmoChanged?.Invoke(currentAmmo, magazineSize);
+        Debug.Log($"[PlayerShooting] Reload complete! Ammo: {currentAmmo}/{magazineSize}");
     }
 
     void Shoot()
     {
+        // Consume ammo
+        if (!infiniteAmmo)
+        {
+            currentAmmo--;
+            OnAmmoChanged?.Invoke(currentAmmo, magazineSize);
+        }
+
         if (AudioManager.Instance != null)
         {
             AudioManager.Instance.PlayGunshot();
@@ -137,10 +210,12 @@ public class PlayerShooting : MonoBehaviour
 
             var damageable = hit.collider.GetComponent<IDamageable>();
             var npc = hit.collider.GetComponent<NPCBehavior>();
+            var alienController = hit.collider.GetComponent<AlienController>();
+            var alienHealth = hit.collider.GetComponent<AlienHealth>();
 
             if (damageable != null)
             {
-                bool wasKill = npc != null;
+                bool wasKill = npc != null || alienHealth != null;
 
                 damageable.TakeDamage(damage);
 
@@ -156,15 +231,20 @@ public class PlayerShooting : MonoBehaviour
 
                 SpawnImpactEffect(hit.point, hit.normal, true);
 
-                if (npc != null && StressSystem.Instance != null)
+                // Handle stress changes
+                if (StressSystem.Instance != null)
                 {
-                    if (npc.IsAlien)
+                    if (alienController != null || alienHealth != null || (npc != null && npc.IsAlien))
                     {
-                        StressSystem.Instance.OnAlienKilled();
+                        // Hit an alien - reduce stress
+                        StressSystem.Instance.ReduceStress(10f);
+                        Debug.Log("[Shooting] Hit Alien - Stress reduced by 10");
                     }
-                    else
+                    else if (npc != null && !npc.IsAlien)
                     {
-                        StressSystem.Instance.AddStress(5f);
+                        // Hit innocent NPC - increase stress
+                        StressSystem.Instance.AddStress(10f);
+                        Debug.Log("[Shooting] Hit Innocent - Stress increased by 10");
                     }
                 }
             }
@@ -191,6 +271,46 @@ public class PlayerShooting : MonoBehaviour
         }
     }
 
+    // ==================== WEAPON UPGRADE (called by DefenseZone) ====================
+
+    /// <summary>
+    /// Upgrade to machine gun - high damage, fast fire rate, no reload needed
+    /// </summary>
+    public void UpgradeToMinigun()
+    {
+        weaponName = "MINIGUN";
+        damage = 50f;
+        fireRate = 0.08f;
+        range = 150f;
+        infiniteAmmo = true;
+        magazineSize = 999;
+        currentAmmo = 999;
+        reloadTime = 0f;
+
+        // Bigger muzzle flash for minigun
+        shakeMagnitude = 0.04f;
+
+        Debug.Log("[PlayerShooting] MINIGUN ACQUIRED! Infinite ammo, no reload!");
+    }
+
+    /// <summary>
+    /// Reset to default pistol
+    /// </summary>
+    public void ResetToPistol()
+    {
+        weaponName = "PISTOL";
+        damage = 25f;
+        fireRate = 0.15f;
+        range = 100f;
+        infiniteAmmo = false;
+        magazineSize = 8;
+        currentAmmo = 8;
+        reloadTime = 1.5f;
+        shakeMagnitude = 0.02f;
+    }
+
+    // ==================== EFFECTS ====================
+
     IEnumerator MuzzleFlashLight()
     {
         Light flashLight = muzzleFlash.GetComponent<Light>();
@@ -215,34 +335,8 @@ public class PlayerShooting : MonoBehaviour
         showingHitMarker = false;
     }
 
-    void OnGUI()
-    {
-        if (showingHitMarker && hitMarkerTexture != null)
-        {
-            GUI.color = currentHitMarkerColor;
-            float size = 20f;
-            float thickness = 2f;
-            float gap = 5f;
-            float centerX = Screen.width / 2f;
-            float centerY = Screen.height / 2f;
-
-            // Draw X pattern for hit marker
-            GUI.DrawTexture(new Rect(centerX - gap - size, centerY - gap - size, size, thickness), hitMarkerTexture);
-            GUI.DrawTexture(new Rect(centerX - gap - size, centerY - gap - size, thickness, size), hitMarkerTexture);
-            GUI.DrawTexture(new Rect(centerX + gap, centerY - gap - size, size, thickness), hitMarkerTexture);
-            GUI.DrawTexture(new Rect(centerX + gap + size - thickness, centerY - gap - size, thickness, size), hitMarkerTexture);
-            GUI.DrawTexture(new Rect(centerX - gap - size, centerY + gap + size - thickness, size, thickness), hitMarkerTexture);
-            GUI.DrawTexture(new Rect(centerX - gap - size, centerY + gap, thickness, size), hitMarkerTexture);
-            GUI.DrawTexture(new Rect(centerX + gap, centerY + gap + size - thickness, size, thickness), hitMarkerTexture);
-            GUI.DrawTexture(new Rect(centerX + gap + size - thickness, centerY + gap, thickness, size), hitMarkerTexture);
-
-            GUI.color = Color.white;
-        }
-    }
-
     string GetSurfaceType(RaycastHit hit)
     {
-        // Check tag safely (avoid error if tag doesn't exist)
         try
         {
             string tag = hit.collider.tag;
@@ -251,7 +345,6 @@ public class PlayerShooting : MonoBehaviour
         }
         catch { }
 
-        // Check material name as fallback
         var renderer = hit.collider.GetComponent<Renderer>();
         if (renderer != null && renderer.material != null)
         {
@@ -260,7 +353,6 @@ public class PlayerShooting : MonoBehaviour
             if (matName.Contains("concrete") || matName.Contains("floor")) return "Concrete";
         }
 
-        // Default to metal for space station
         return "Metal";
     }
 
@@ -332,6 +424,86 @@ public class PlayerShooting : MonoBehaviour
         if (debugLineRenderer != null)
         {
             debugLineRenderer.enabled = false;
+        }
+    }
+
+    // ==================== UI ====================
+
+    void OnGUI()
+    {
+        // Hit marker
+        if (showingHitMarker && hitMarkerTexture != null)
+        {
+            GUI.color = currentHitMarkerColor;
+            float size = 20f;
+            float thickness = 2f;
+            float gap = 5f;
+            float centerX = Screen.width / 2f;
+            float centerY = Screen.height / 2f;
+
+            GUI.DrawTexture(new Rect(centerX - gap - size, centerY - gap - size, size, thickness), hitMarkerTexture);
+            GUI.DrawTexture(new Rect(centerX - gap - size, centerY - gap - size, thickness, size), hitMarkerTexture);
+            GUI.DrawTexture(new Rect(centerX + gap, centerY - gap - size, size, thickness), hitMarkerTexture);
+            GUI.DrawTexture(new Rect(centerX + gap + size - thickness, centerY - gap - size, thickness, size), hitMarkerTexture);
+            GUI.DrawTexture(new Rect(centerX - gap - size, centerY + gap + size - thickness, size, thickness), hitMarkerTexture);
+            GUI.DrawTexture(new Rect(centerX - gap - size, centerY + gap, thickness, size), hitMarkerTexture);
+            GUI.DrawTexture(new Rect(centerX + gap, centerY + gap + size - thickness, size, thickness), hitMarkerTexture);
+            GUI.DrawTexture(new Rect(centerX + gap + size - thickness, centerY + gap, thickness, size), hitMarkerTexture);
+
+            GUI.color = Color.white;
+        }
+
+        // Ammo display
+        GUIStyle ammoStyle = new GUIStyle(GUI.skin.label);
+        ammoStyle.fontSize = 24;
+        ammoStyle.fontStyle = FontStyle.Bold;
+        ammoStyle.alignment = TextAnchor.LowerRight;
+        ammoStyle.normal.textColor = Color.white;
+
+        string ammoText = infiniteAmmo ? "∞" : $"{currentAmmo}/{magazineSize}";
+        GUI.Label(new Rect(Screen.width - 200, Screen.height - 80, 180, 40), $"{weaponName}", ammoStyle);
+
+        ammoStyle.fontSize = 32;
+        GUI.Label(new Rect(Screen.width - 200, Screen.height - 50, 180, 40), ammoText, ammoStyle);
+
+        // Reload indicator
+        if (isReloading)
+        {
+            GUIStyle reloadStyle = new GUIStyle(GUI.skin.label);
+            reloadStyle.fontSize = 20;
+            reloadStyle.fontStyle = FontStyle.Bold;
+            reloadStyle.alignment = TextAnchor.MiddleCenter;
+            reloadStyle.normal.textColor = Color.yellow;
+
+            GUI.Label(new Rect(Screen.width / 2 - 100, Screen.height / 2 + 50, 200, 30), "RELOADING...", reloadStyle);
+
+            // Progress bar
+            float barWidth = 150f;
+            float barHeight = 10f;
+            float barX = Screen.width / 2 - barWidth / 2;
+            float barY = Screen.height / 2 + 80;
+
+            // Background
+            GUI.color = new Color(0.2f, 0.2f, 0.2f, 0.8f);
+            GUI.DrawTexture(new Rect(barX, barY, barWidth, barHeight), hitMarkerTexture);
+
+            // Fill
+            GUI.color = Color.yellow;
+            GUI.DrawTexture(new Rect(barX, barY, barWidth * reloadProgress, barHeight), hitMarkerTexture);
+
+            GUI.color = Color.white;
+        }
+
+        // Low ammo warning
+        if (!infiniteAmmo && currentAmmo <= 2 && currentAmmo > 0 && !isReloading)
+        {
+            GUIStyle lowAmmoStyle = new GUIStyle(GUI.skin.label);
+            lowAmmoStyle.fontSize = 16;
+            lowAmmoStyle.alignment = TextAnchor.LowerRight;
+            float pulse = Mathf.PingPong(Time.time * 3f, 1f);
+            lowAmmoStyle.normal.textColor = new Color(1f, 0.5f, 0f, 0.5f + pulse * 0.5f);
+
+            GUI.Label(new Rect(Screen.width - 200, Screen.height - 100, 180, 20), "[R] RELOAD", lowAmmoStyle);
         }
     }
 

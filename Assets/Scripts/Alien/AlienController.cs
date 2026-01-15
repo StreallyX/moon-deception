@@ -46,14 +46,21 @@ public class AlienController : MonoBehaviour
         {
             characterController = gameObject.AddComponent<CharacterController>();
         }
-        
+
         // FORCE CharacterController settings to prevent falling through ground
         characterController.skinWidth = 0.08f;
         characterController.stepOffset = 0.3f;
         characterController.minMoveDistance = 0.001f;
         characterController.height = 2f;
         characterController.radius = 0.5f;
-        characterController.center = new Vector3(0, 0, 0);
+        characterController.center = new Vector3(0, 0, 0); // Center at chest height for proper raycast hits
+
+        // Ensure AlienHealth exists for damage system
+        if (GetComponent<AlienHealth>() == null)
+        {
+            gameObject.AddComponent<AlienHealth>();
+            Debug.Log("[AlienController] Added AlienHealth component");
+        }
     }
 
     

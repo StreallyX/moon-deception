@@ -55,12 +55,15 @@
 
 ---
 
-## Phase 2 Checklist: Solo Alien (TPS)
+## Phase 2 Checklist: Solo Alien (TPS) - COMPLETE
 - [x] AlienController.cs - TPS movement with orbital camera
 - [x] HungerSystem.cs - Hunger decay, coffee boost, eat to restore
-- [ ] AlienAbilities.cs - Chaos powers (collision, bugs, sounds, wind)
-- [ ] AlienDisguise.cs - Blend with NPCs behavior
-- [x] StressOverload event - Basic in GameManager (needs visual effects)
+- [x] AlienAbilities.cs - 4 chaos powers (collision, glitch, sound, wind) with cooldowns
+- [x] AlienTransformation.cs - Transform during chaos, speed boost, attack ability
+- [x] Wall-hack vision - See astronaut through walls when transformed
+- [x] ChaosLightingController.cs - Lights off, emergency red lights, alien night vision
+- [x] DefenseZone.cs - Zone where astronaut gets machine gun upgrade
+- [x] AstronautHealth.cs - Health system for astronaut (alien attacks work)
 
 ---
 
@@ -106,6 +109,26 @@
 - Created: GameBootstrap (auto-initializes all systems)
 - **Phase 1 CODE COMPLETE** - needs audio files and testing
 
+### Session 2 (2026-01-15)
+- Created AlienAbilities.cs - 4 chaos powers (1,2,3,4 keys)
+- Created AlienTransformation.cs - Transform + wall-hack + attack
+- Created ChaosLightingController.cs - Blackout + emergency lights
+- Created DefenseZone.cs - Weapon upgrade zone for astronaut
+- Created AstronautHealth.cs - Health system for astronaut
+- Updated GameBootstrap.cs - Auto-creates all new systems
+- **Phase 2 CODE COMPLETE** - ready for testing
+
+### Session 3 (2026-01-15)
+- Fixed CameraShake inactive camera error (added activeInHierarchy check)
+- Fixed DefenseZone collider error (auto-creates BoxCollider)
+- Created AlienHealth.cs - Alien takes damage and loses HP
+- Updated PlayerShooting.cs - Hitting alien reduces stress by 10
+- Rewrote AlienTransformation.cs - Better visuals, fluorescent wall-hack with direction line
+- Rewrote HungerSystem.cs - Hunger=0 reveals alien (glitch effects, sounds) instead of death
+- Alien attack now damages astronaut via AstronautHealth
+- Created CLAUDE.md for future Claude Code sessions
+- **All Phase 2 bugs fixed** - ready for testing
+
 ---
 
 ## Known Issues
@@ -120,10 +143,14 @@ Assets/Scripts/
 ├── Astronaut/
 │   ├── PlayerMovement.cs    ✅ + Footsteps
 │   ├── PlayerShooting.cs    ✅ + Muzzle flash, hit markers, sounds
-│   └── StressSystem.cs      ✅ Complete
+│   ├── StressSystem.cs      ✅ Complete
+│   └── AstronautHealth.cs   ✅ NEW - Health + damage
 ├── Alien/
 │   ├── AlienController.cs   ✅ Complete
-│   ├── HungerSystem.cs      ✅ Complete
+│   ├── HungerSystem.cs      ✅ Rewritten - Hunger=0 reveals alien
+│   ├── AlienAbilities.cs    ✅ 4 chaos powers (1,2,3,4)
+│   ├── AlienTransformation.cs ✅ Transform + wall-hack + attack
+│   ├── AlienHealth.cs       ✅ NEW - Alien HP system
 │   └── AlienEatSystem.cs    ⚠️ Exists (not reviewed)
 ├── NPC/
 │   ├── NPCBehavior.cs       ✅ Complete
@@ -131,10 +158,12 @@ Assets/Scripts/
 ├── Core/
 │   ├── GameManager.cs       ✅ + Game Over integration
 │   ├── GameController.cs    ✅ TAB switch
-│   ├── GameBootstrap.cs     ✅ NEW - Auto-init all systems
-│   ├── AudioManager.cs      ✅ NEW - Central audio with pooling
-│   ├── CameraShake.cs       ✅ NEW - Shoot/impact/stress shake
-│   ├── PostProcessController.cs ✅ NEW - Dynamic URP effects
+│   ├── GameBootstrap.cs     ✅ Auto-init all systems (updated)
+│   ├── AudioManager.cs      ✅ Central audio with pooling
+│   ├── CameraShake.cs       ✅ Shoot/impact/stress shake
+│   ├── PostProcessController.cs ✅ Dynamic URP effects
+│   ├── ChaosLightingController.cs ✅ NEW - Blackout + emergency lights
+│   ├── DefenseZone.cs       ✅ NEW - Weapon upgrade zones
 │   └── NetworkManager.cs    📋 Phase 4
 ├── UI/
 │   ├── GameUIManager.cs     ✅ HUD bars

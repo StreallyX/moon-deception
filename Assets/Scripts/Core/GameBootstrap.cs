@@ -11,9 +11,12 @@ public class GameBootstrap : MonoBehaviour
     public bool createAudioManager = true;
     public bool createMenuManager = true;
     public bool createPostProcessController = true;
+    public bool createChaosLightingController = true;
 
     [Header("Player Setup")]
     public bool addCameraShakeToPlayer = true;
+    public bool addHealthToAstronaut = true;
+    public bool addAbilitiesToAlien = true;
 
     private static bool hasInitialized = false;
 
@@ -61,11 +64,23 @@ public class GameBootstrap : MonoBehaviour
             Debug.Log("[GameBootstrap] Created PostProcessController");
         }
 
+        // Chaos Lighting Controller
+        if (createChaosLightingController && ChaosLightingController.Instance == null)
+        {
+            GameObject chaosLightingObj = new GameObject("ChaosLightingController");
+            chaosLightingObj.AddComponent<ChaosLightingController>();
+            DontDestroyOnLoad(chaosLightingObj);
+            Debug.Log("[GameBootstrap] Created ChaosLightingController");
+        }
+
         // Add CameraShake to player camera
         if (addCameraShakeToPlayer)
         {
             StartCoroutine(SetupCameraShake());
         }
+
+        // Add components to player and alien
+        StartCoroutine(SetupPlayerAndAlien());
 
         Debug.Log("[GameBootstrap] All systems initialized");
     }
@@ -101,6 +116,48 @@ public class GameBootstrap : MonoBehaviour
             {
                 alienCam.gameObject.AddComponent<CameraShake>();
                 Debug.Log("[GameBootstrap] Added CameraShake to alien camera");
+            }
+        }
+    }
+
+    System.Collections.IEnumerator SetupPlayerAndAlien()
+    {
+        yield return null;
+
+        // Setup astronaut
+        if (addHealthToAstronaut)
+        {
+            PlayerMovement player = FindObjectOfType<PlayerMovement>();
+            if (player != null && player.GetComponent<AstronautHealth>() == null)
+            {
+                player.gameObject.AddComponent<AstronautHealth>();
+                Debug.Log("[GameBootstrap] Added AstronautHealth to player");
+            }
+        }
+
+        // Setup alien
+        if (addAbilitiesToAlien)
+        {
+            AlienController alien = FindObjectOfType<AlienController>();
+            if (alien != null)
+            {
+                if (alien.GetComponent<AlienAbilities>() == null)
+                {
+                    alien.gameObject.AddComponent<AlienAbilities>();
+                    Debug.Log("[GameBootstrap] Added AlienAbilities to alien");
+                }
+
+                if (alien.GetComponent<AlienTransformation>() == null)
+                {
+                    alien.gameObject.AddComponent<AlienTransformation>();
+                    Debug.Log("[GameBootstrap] Added AlienTransformation to alien");
+                }
+
+                if (alien.GetComponent<AlienHealth>() == null)
+                {
+                    alien.gameObject.AddComponent<AlienHealth>();
+                    Debug.Log("[GameBootstrap] Added AlienHealth to alien");
+                }
             }
         }
     }

@@ -470,4 +470,22 @@ public Slider GetStressSlider() => stressSlider;
 public Slider GetHungerSlider() => hungerSlider;
 public Image GetStressBarFill() => stressBarFill;
 public Image GetHungerBarFill() => hungerBarFill;
+
+/// <summary>
+/// Switch to chaos mode - hide hunger bar, show only HP for alien
+/// </summary>
+public void SetChaosMode(bool isChaos)
+{
+    if (currentPlayerType == PlayerType.Alien)
+    {
+        // In chaos mode: hide hunger, show HP
+        if (hungerBarPanel != null)
+            hungerBarPanel.SetActive(!isChaos);
+
+        if (alienHealthBarPanel != null)
+            alienHealthBarPanel.SetActive(true);
+    }
+
+    Debug.Log($"[GameUIManager] Chaos mode: {isChaos}");
+}
 }

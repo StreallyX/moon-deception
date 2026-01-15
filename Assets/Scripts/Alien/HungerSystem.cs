@@ -1,6 +1,14 @@
 using UnityEngine;
 using UnityEngine.UI;
+using System.Collections;
 
+/// <summary>
+/// Alien hunger system.
+/// When hunger reaches 0, the alien doesn't die but reveals itself:
+/// - Makes hungry/growling sounds
+/// - Visual glitches showing alien form
+/// - Gives away position to astronaut
+/// </summary>
 public class HungerSystem : MonoBehaviour
 {
     [Header("Hunger Settings")]
@@ -10,22 +18,45 @@ public class HungerSystem : MonoBehaviour
     public float coffeeDecayMultiplier = 1.5f;
     public float coffeeRestoreAmount = 10f;
     public float eatRestoreAmount = 40f;
-    
+
+    [Header("Starving Effects")]
+    public float starvingSoundInterval = 3f;
+    public float starvingGlitchIntensity = 0.5f;
+    public Color starvingGlitchColor = new Color(0.5f, 0.1f, 0.1f);
+
     [Header("UI")]
     public Slider hungerSlider;
     public Image sliderFill;
     public Gradient hungerGradient;
-    
+
     private float currentDecayMultiplier = 1f;
     private float coffeeEffectTimer = 0f;
     private float coffeeEffectDuration = 10f;
-    
-    public bool IsDead => currentHunger <= 0;
-    
+
+    private bool isStarving = false;
+    private float lastStarvingSound = 0f;
+    private Renderer[] renderers;
+    private Color[] originalColors;
+    private Coroutine glitchCoroutine;
+
+    public bool IsStarving => isStarving;
+    public float HungerPercent => currentHunger / maxHunger;
+
     void Start()
     {
         currentHunger = maxHunger;
-        
+
+        // Get renderers for glitch effect
+        renderers = GetComponentsInChildren<Renderer>();
+        originalColors = new Color[renderers.Length];
+        for (int i = 0; i < renderers.Length; i++)
+        {
+            if (renderers[i] != null && renderers[i].material != null)
+            {
+                originalColors[i] = renderers[i].material.color;
+            }
+        }
+
         if (GameUIManager.Instance != null)
         {
             hungerSlider = GameUIManager.Instance.GetHungerSlider();
@@ -41,19 +72,19 @@ public class HungerSystem : MonoBehaviour
                     hungerSlider = sliderObj.GetComponent<Slider>();
                 }
             }
-            
+
             if (hungerSlider != null)
             {
                 hungerSlider.maxValue = maxHunger;
                 hungerSlider.value = currentHunger;
-                
+
                 if (sliderFill == null)
                 {
                     sliderFill = hungerSlider.fillRect?.GetComponent<Image>();
                 }
             }
         }
-        
+
         if (hungerGradient == null)
         {
             hungerGradient = new Gradient();
@@ -73,9 +104,10 @@ public class HungerSystem : MonoBehaviour
         UpdateUI();
         Debug.Log("[HungerSystem] Initialized");
     }
-    
+
     void Update()
     {
+        // Coffee effect decay
         if (coffeeEffectTimer > 0)
         {
             coffeeEffectTimer -= Time.deltaTime;
@@ -84,18 +116,30 @@ public class HungerSystem : MonoBehaviour
                 currentDecayMultiplier = 1f;
             }
         }
-        
+
+        // Hunger decay
         currentHunger -= hungerDecayRate * currentDecayMultiplier * Time.deltaTime;
         currentHunger = Mathf.Clamp(currentHunger, 0, maxHunger);
-        
+
         UpdateUI();
-        
-        if (IsDead)
+
+        // Check starving state
+        if (currentHunger <= 0 && !isStarving)
         {
-            OnHungerDepleted();
+            StartStarving();
+        }
+        else if (currentHunger > 0 && isStarving)
+        {
+            StopStarving();
+        }
+
+        // Starving effects
+        if (isStarving)
+        {
+            UpdateStarvingEffects();
         }
     }
-    
+
     void UpdateUI()
     {
         if (GameUIManager.Instance != null)
@@ -107,7 +151,7 @@ public class HungerSystem : MonoBehaviour
             if (hungerSlider != null)
             {
                 hungerSlider.value = currentHunger;
-                
+
                 if (sliderFill != null && hungerGradient != null)
                 {
                     sliderFill.color = hungerGradient.Evaluate(currentHunger / maxHunger);
@@ -115,7 +159,138 @@ public class HungerSystem : MonoBehaviour
             }
         }
     }
-    
+
+    // ==================== STARVING STATE ====================
+
+    void StartStarving()
+    {
+        isStarving = true;
+        Debug.Log("[HungerSystem] STARVING! Alien is revealing itself!");
+
+        // Start glitch effect
+        if (glitchCoroutine != null)
+        {
+            StopCoroutine(glitchCoroutine);
+        }
+        glitchCoroutine = StartCoroutine(StarvingGlitchEffect());
+
+        // Play initial starving sound
+        PlayStarvingSound();
+    }
+
+    void StopStarving()
+    {
+        isStarving = false;
+        Debug.Log("[HungerSystem] No longer starving");
+
+        // Stop glitch effect
+        if (glitchCoroutine != null)
+        {
+            StopCoroutine(glitchCoroutine);
+            glitchCoroutine = null;
+        }
+
+        // Reset colors
+        ResetColors();
+    }
+
+    void UpdateStarvingEffects()
+    {
+        // Play sounds periodically
+        if (Time.time - lastStarvingSound > starvingSoundInterval)
+        {
+            PlayStarvingSound();
+            lastStarvingSound = Time.time;
+        }
+    }
+
+    void PlayStarvingSound()
+    {
+        if (AudioManager.Instance != null)
+        {
+            // Play a growling/hungry sound
+            // Using existing sounds as placeholder
+            AudioManager.Instance.PlaySFX3D(AudioManager.Instance.npcDeath, transform.position, 0.5f);
+        }
+
+        // Also stress the astronaut if nearby (they hear the alien sounds)
+        if (StressSystem.Instance != null)
+        {
+            float dist = Vector3.Distance(transform.position, StressSystem.Instance.transform.position);
+            if (dist < 15f)
+            {
+                StressSystem.Instance.AddStress(3f);
+                Debug.Log("[HungerSystem] Astronaut heard starving alien sounds!");
+            }
+        }
+    }
+
+    IEnumerator StarvingGlitchEffect()
+    {
+        while (isStarving)
+        {
+            // Random glitch timing
+            float glitchDuration = Random.Range(0.1f, 0.3f);
+            float waitTime = Random.Range(0.5f, 2f);
+
+            // Show alien form briefly
+            ShowAlienGlitch(true);
+            yield return new WaitForSeconds(glitchDuration);
+
+            // Return to normal
+            ShowAlienGlitch(false);
+            yield return new WaitForSeconds(waitTime);
+        }
+    }
+
+    void ShowAlienGlitch(bool showAlien)
+    {
+        if (showAlien)
+        {
+            // Glitch to alien appearance
+            foreach (var renderer in renderers)
+            {
+                if (renderer != null && renderer.material != null)
+                {
+                    // Flash red/dark color
+                    renderer.material.color = starvingGlitchColor;
+
+                    // Add emission glow
+                    if (renderer.material.HasProperty("_EmissionColor"))
+                    {
+                        renderer.material.EnableKeyword("_EMISSION");
+                        renderer.material.SetColor("_EmissionColor", starvingGlitchColor * 0.5f);
+                    }
+                }
+            }
+
+            // Scale glitch
+            transform.localScale = transform.localScale * (1f + Random.Range(-0.1f, 0.1f));
+        }
+        else
+        {
+            ResetColors();
+        }
+    }
+
+    void ResetColors()
+    {
+        for (int i = 0; i < renderers.Length; i++)
+        {
+            if (renderers[i] != null && renderers[i].material != null && i < originalColors.Length)
+            {
+                renderers[i].material.color = originalColors[i];
+
+                if (renderers[i].material.HasProperty("_EmissionColor"))
+                {
+                    renderers[i].material.SetColor("_EmissionColor", Color.black);
+                }
+            }
+        }
+    }
+
+    // ==================== ACTIONS ====================
+
     public void DrinkCoffee()
     {
         currentHunger = Mathf.Min(currentHunger + coffeeRestoreAmount, maxHunger);
@@ -123,15 +298,40 @@ public class HungerSystem : MonoBehaviour
         coffeeEffectTimer = coffeeEffectDuration;
         Debug.Log($"[HungerSystem] Drank coffee. Hunger: {currentHunger}, Decay multiplier: {currentDecayMultiplier}");
     }
-    
+
     public void Eat()
     {
         currentHunger = Mathf.Min(currentHunger + eatRestoreAmount, maxHunger);
         Debug.Log($"[HungerSystem] Ate target. Hunger: {currentHunger}");
     }
-    
-    void OnHungerDepleted()
+
+    public void AddHunger(float amount)
     {
-        Debug.Log("[HungerSystem] Alien starved to death!");
+        currentHunger = Mathf.Min(currentHunger + amount, maxHunger);
+        UpdateUI();
+    }
+
+    // ==================== UI WARNING ====================
+
+    void OnGUI()
+    {
+        // Don't show UI if disabled (chaos mode) or not controlled
+        if (!enabled) return;
+        if (!AlienController.IsAlienControlled) return;
+
+        // Show warning when low hunger
+        if (currentHunger < maxHunger * 0.3f)
+        {
+            GUIStyle style = new GUIStyle(GUI.skin.label);
+            style.fontSize = 20;
+            style.fontStyle = FontStyle.Bold;
+            style.alignment = TextAnchor.MiddleCenter;
+
+            float pulse = Mathf.PingPong(Time.time * 3f, 1f);
+            style.normal.textColor = new Color(1f, 0.5f, 0f, 0.5f + pulse * 0.5f);
+
+            string warning = isStarving ? "STARVING! YOU ARE EXPOSED!" : "LOW HUNGER!";
+            GUI.Label(new Rect(Screen.width / 2 - 150, Screen.height - 100, 300, 30), warning, style);
+        }
     }
 }

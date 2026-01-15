@@ -42,7 +42,7 @@ public class PlayerMovement : MonoBehaviour
         controller.minMoveDistance = 0.001f;
         controller.height = 2f;
         controller.radius = 0.5f;
-        controller.center = new Vector3(0, 0, 0);
+        controller.center = new Vector3(0, 0, 0); // Center at chest height for proper trigger detection
     }
 
 

@@ -44,6 +44,9 @@ public class CameraShake : MonoBehaviour
     /// </summary>
     public void Shake(float duration, float magnitude)
     {
+        // Don't shake if camera is inactive
+        if (!gameObject.activeInHierarchy) return;
+
         if (shakeCoroutine != null)
         {
             StopCoroutine(shakeCoroutine);
