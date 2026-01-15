@@ -11,20 +11,26 @@ public class PlayerMovement : MonoBehaviour
     [Header("Mouse Look Settings")]
     public float mouseSensitivity = 2f;
     public Transform cameraTransform;
-    
+
     [Header("Camera Reference")]
     public Camera playerCamera;
-    
+
+    [Header("Footsteps")]
+    public float footstepInterval = 0.4f;
+    public string surfaceType = "Metal";
+
     [Header("Debug")]
-    public bool showDebugLogs = true;
+    public bool showDebugLogs = false;
 
     private CharacterController controller;
     private Vector3 velocity;
     private float xRotation = 0f;
-    
+    private float footstepTimer = 0f;
+    private bool wasMoving = false;
+
     public static PlayerMovement ActivePlayer { get; private set; }
     public static bool IsPlayerControlled => ActivePlayer != null && ActivePlayer.enabled;
-    
+
     private bool isControlled = false;
 
     void Awake()
@@ -145,17 +151,36 @@ public class PlayerMovement : MonoBehaviour
         
         // 5. Calculate horizontal movement (can be zero)
         Vector3 move = transform.right * h + transform.forward * v;
-        
+
         // 6. ALWAYS call Move() - even if move is zero!
         controller.Move(move * walkSpeed * Time.deltaTime);
-        
+
         // 7. ALWAYS apply vertical velocity
         controller.Move(new Vector3(0, velocity.y, 0) * Time.deltaTime);
-        
-        // Debug logging
-        if (showDebugLogs && Time.frameCount % 60 == 0)
+
+        // 8. Footstep sounds
+        bool isMoving = move.magnitude > 0.1f && controller.isGrounded;
+        if (isMoving)
         {
-            Debug.Log($"[Player] isGrounded={controller.isGrounded}, velocity.y={velocity.y:F2}, pos.y={transform.position.y:F2}");
+            footstepTimer += Time.deltaTime;
+            if (footstepTimer >= footstepInterval)
+            {
+                PlayFootstep();
+                footstepTimer = 0f;
+            }
+        }
+        else
+        {
+            footstepTimer = footstepInterval * 0.5f; // Ready for next step
+        }
+        wasMoving = isMoving;
+    }
+
+    void PlayFootstep()
+    {
+        if (AudioManager.Instance != null)
+        {
+            AudioManager.Instance.PlayFootstep(surfaceType);
         }
     }
 

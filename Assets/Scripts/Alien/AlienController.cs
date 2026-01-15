@@ -187,7 +187,7 @@ public class AlienController : MonoBehaviour
         // Debug logging
         if (showDebugLogs && Time.frameCount % 60 == 0)
         {
-            Debug.Log($"[Alien] isGrounded={characterController.isGrounded}, velocity.y={velocity.y:F2}, pos.y={transform.position.y:F2}");
+            //Debug.Log($"[Alien] isGrounded={characterController.isGrounded}, velocity.y={velocity.y:F2}, pos.y={transform.position.y:F2}");
         }
     }
     

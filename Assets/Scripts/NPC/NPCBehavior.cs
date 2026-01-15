@@ -225,7 +225,7 @@ public class NPCBehavior : MonoBehaviour, IDamageable
     {
         if (currentState != newState)
         {
-            Debug.Log($"[NPC] {npcName} state: {currentState} -> {newState}");
+            //Debug.Log($"[NPC] {npcName} state: {currentState} -> {newState}");
         }
         currentState = newState;
         stateTimer = 0f;

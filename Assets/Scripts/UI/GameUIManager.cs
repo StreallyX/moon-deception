@@ -22,13 +22,25 @@ public class GameUIManager : MonoBehaviour
     [SerializeField] private Image stressBarFill;
     [SerializeField] private Image stressBarBackground;
     [SerializeField] private Text stressLabel;
-    
+
+    [SerializeField] private GameObject astronautHealthBarPanel;
+    [SerializeField] private Slider astronautHealthSlider;
+    [SerializeField] private Image astronautHealthBarFill;
+    [SerializeField] private Image astronautHealthBarBackground;
+    [SerializeField] private Text astronautHealthLabel;
+
     [Header("Alien UI")]
     [SerializeField] private GameObject hungerBarPanel;
     [SerializeField] private Slider hungerSlider;
     [SerializeField] private Image hungerBarFill;
     [SerializeField] private Image hungerBarBackground;
     [SerializeField] private Text hungerLabel;
+
+    [SerializeField] private GameObject alienHealthBarPanel;
+    [SerializeField] private Slider alienHealthSlider;
+    [SerializeField] private Image alienHealthBarFill;
+    [SerializeField] private Image alienHealthBarBackground;
+    [SerializeField] private Text alienHealthLabel;
     
     [Header("Interaction UI")]
     [SerializeField] private GameObject interactionPrompt;
@@ -106,6 +118,28 @@ public class GameUIManager : MonoBehaviour
             "STRESS",
             stressBarBackgroundColor
         );
+
+        astronautHealthBarPanel = CreateStyledBar(
+            mainCanvas.transform,
+            "AstronautHealthBarPanel",
+            new Vector2(0, 30),
+            new Vector2(400, 40),
+            out astronautHealthSlider,
+            out astronautHealthBarFill,
+            out astronautHealthBarBackground,
+            out astronautHealthLabel,
+            "HEALTH",
+            new Color(0.2f, 0.2f, 0.2f, 0.8f)
+        );
+
+        RectTransform healthRect = astronautHealthBarPanel.GetComponent<RectTransform>();
+        healthRect.anchorMin = new Vector2(0.5f, 0);
+        healthRect.anchorMax = new Vector2(0.5f, 0);
+        healthRect.pivot = new Vector2(0.5f, 0);
+        healthRect.anchoredPosition = new Vector2(0, 30);
+
+        astronautHealthBarPanel.SetActive(false);
+        astronautUIContainer.SetActive(false);
     }
     
     void CreateAlienUI()
@@ -132,6 +166,28 @@ public class GameUIManager : MonoBehaviour
             hungerBarBackgroundColor
         );
         hungerSlider.direction = Slider.Direction.RightToLeft;
+
+        alienHealthBarPanel = CreateStyledBar(
+            mainCanvas.transform,
+            "AlienHealthBarPanel",
+            new Vector2(0, 30),
+            new Vector2(400, 40),
+            out alienHealthSlider,
+            out alienHealthBarFill,
+            out alienHealthBarBackground,
+            out alienHealthLabel,
+            "HEALTH",
+            new Color(0.2f, 0.2f, 0.2f, 0.8f)
+        );
+
+        RectTransform healthRect = alienHealthBarPanel.GetComponent<RectTransform>();
+        healthRect.anchorMin = new Vector2(0.5f, 0);
+        healthRect.anchorMax = new Vector2(0.5f, 0);
+        healthRect.pivot = new Vector2(0.5f, 0);
+        healthRect.anchoredPosition = new Vector2(0, 30);
+
+        alienHealthBarPanel.SetActive(false);
+        alienUIContainer.SetActive(false);
     }
     
     GameObject CreateStyledBar(
@@ -310,24 +366,32 @@ public class GameUIManager : MonoBehaviour
     {
         if (astronautUIContainer != null)
             astronautUIContainer.SetActive(true);
+        if (astronautHealthBarPanel != null)
+            astronautHealthBarPanel.SetActive(true);
     }
-    
+
     void HideAstronautUI()
     {
         if (astronautUIContainer != null)
             astronautUIContainer.SetActive(false);
+        if (astronautHealthBarPanel != null)
+            astronautHealthBarPanel.SetActive(false);
     }
-    
+
     void ShowAlienUI()
     {
         if (alienUIContainer != null)
             alienUIContainer.SetActive(true);
+        if (alienHealthBarPanel != null)
+            alienHealthBarPanel.SetActive(true);
     }
-    
+
     void HideAlienUI()
     {
         if (alienUIContainer != null)
             alienUIContainer.SetActive(false);
+        if (alienHealthBarPanel != null)
+            alienHealthBarPanel.SetActive(false);
     }
     
     void HideAllUI()
@@ -372,9 +436,38 @@ public class GameUIManager : MonoBehaviour
         hungerBarFill.color = Color.Lerp(Color.red, Color.green, percent);
     }
 
+public void UpdateAstronautHealthBar(float value, float maxValue)
+    {
+    if (astronautHealthSlider != null)
+    {
+    astronautHealthSlider.maxValue = maxValue;
+astronautHealthSlider.value = value;
 
-    public Slider GetStressSlider() => stressSlider;
-    public Slider GetHungerSlider() => hungerSlider;
-    public Image GetStressBarFill() => stressBarFill;
-    public Image GetHungerBarFill() => hungerBarFill;
+float percent = value / maxValue;
+if (astronautHealthBarFill != null)
+{
+astronautHealthBarFill.color = Color.Lerp(Color.red, Color.green, percent);
+}
+}
+}
+
+public void UpdateAlienHealthBar(float value, float maxValue)
+{
+if (alienHealthSlider != null)
+{
+alienHealthSlider.maxValue = maxValue;
+alienHealthSlider.value = value;
+
+float percent = value / maxValue;
+if (alienHealthBarFill != null)
+{
+alienHealthBarFill.color = Color.Lerp(Color.red, Color.green, percent);
+}
+}
+}
+
+public Slider GetStressSlider() => stressSlider;
+public Slider GetHungerSlider() => hungerSlider;
+public Image GetStressBarFill() => stressBarFill;
+public Image GetHungerBarFill() => hungerBarFill;
 }

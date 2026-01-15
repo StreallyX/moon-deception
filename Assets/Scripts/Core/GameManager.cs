@@ -287,9 +287,19 @@ public class GameManager : MonoBehaviour
 
         OnGameEnd?.Invoke(winner);
 
-        // Unlock cursor
-        Cursor.lockState = CursorLockMode.None;
-        Cursor.visible = true;
+        // Show game over screen
+        if (MenuManager.Instance != null)
+        {
+            bool victory = winner == WinCondition.AstronautWins;
+            int aliensKilled = maxAliens - aliensRemaining;
+            MenuManager.Instance.ShowGameOver(victory, aliensKilled, innocentsKilled, gameTimer);
+        }
+        else
+        {
+            // Fallback if no menu manager
+            Cursor.lockState = CursorLockMode.None;
+            Cursor.visible = true;
+        }
     }
 
     /// <summary>
