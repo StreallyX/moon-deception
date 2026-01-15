@@ -65,10 +65,24 @@ public class GameManager : MonoBehaviour
         if (Instance == null)
         {
             Instance = this;
+            DontDestroyOnLoad(gameObject);
         }
         else
         {
             Destroy(gameObject);
+        }
+
+        InitializeUIManager();
+    }
+
+    void InitializeUIManager()
+    {
+        if (GameUIManager.Instance == null)
+        {
+            GameObject uiManagerObj = new GameObject("GameUIManager");
+            uiManagerObj.AddComponent<GameUIManager>();
+            DontDestroyOnLoad(uiManagerObj);
+            Debug.Log("[GameManager] GameUIManager created");
         }
     }
 

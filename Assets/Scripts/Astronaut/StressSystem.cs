@@ -47,32 +47,37 @@ public class StressSystem : MonoBehaviour, IDamageable
     void Start()
     {
         currentStress = 0f;
-        
-        // Auto-find UI if not assigned
-        if (stressSlider == null)
+
+        if (GameUIManager.Instance != null)
         {
-            stressSlider = GameObject.Find("StressBar")?.GetComponent<Slider>();
+            stressSlider = GameUIManager.Instance.GetStressSlider();
+            stressBarFill = GameUIManager.Instance.GetStressBarFill();
+        }
+        else
+        {
             if (stressSlider == null)
             {
-                var sliders = FindObjectsOfType<Slider>();
-                foreach (var s in sliders)
+                stressSlider = GameObject.Find("StressBar")?.GetComponent<Slider>();
+                if (stressSlider == null)
                 {
-                    if (s.name.ToLower().Contains("stress"))
+                    var sliders = FindObjectsOfType<Slider>();
+                    foreach (var s in sliders)
                     {
-                        stressSlider = s;
-                        break;
+                        if (s.name.ToLower().Contains("stress"))
+                        {
+                            stressSlider = s;
+                            break;
+                        }
                     }
                 }
             }
+
+            if (stressSlider != null && stressBarFill == null)
+            {
+                stressBarFill = stressSlider.fillRect?.GetComponent<Image>();
+            }
         }
-        
-        // Get fill image from slider
-        if (stressSlider != null && stressBarFill == null)
-        {
-            stressBarFill = stressSlider.fillRect?.GetComponent<Image>();
-        }
-        
-        // Create default gradient if not set
+
         if (stressColorGradient == null)
         {
             stressColorGradient = new Gradient();
@@ -85,7 +90,7 @@ public class StressSystem : MonoBehaviour, IDamageable
             alphaKeys[1] = new GradientAlphaKey(1f, 1f);
             stressColorGradient.SetKeys(colorKeys, alphaKeys);
         }
-        
+
         UpdateUI();
         Debug.Log($"[StressSystem] Initialized. Slider found: {stressSlider != null}");
     }
@@ -176,16 +181,23 @@ public class StressSystem : MonoBehaviour, IDamageable
 
     private void UpdateUI()
     {
-        if (stressSlider != null)
+        if (GameUIManager.Instance != null)
         {
-            stressSlider.minValue = 0f;
-            stressSlider.maxValue = 1f;
-            stressSlider.value = StressPercent;
+            GameUIManager.Instance.UpdateStressBar(currentStress, maxStress);
         }
-
-        if (stressBarFill != null && stressColorGradient != null)
+        else
         {
-            stressBarFill.color = stressColorGradient.Evaluate(StressPercent);
+            if (stressSlider != null)
+            {
+                stressSlider.minValue = 0f;
+                stressSlider.maxValue = 1f;
+                stressSlider.value = StressPercent;
+            }
+
+            if (stressBarFill != null && stressColorGradient != null)
+            {
+                stressBarFill.color = stressColorGradient.Evaluate(StressPercent);
+            }
         }
     }
 

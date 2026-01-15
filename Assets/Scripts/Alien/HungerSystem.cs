@@ -1,16 +1,12 @@
 using UnityEngine;
 using UnityEngine.UI;
 
-/// <summary>
-/// Manages Alien hunger. Hunger decreases over time.
-/// Coffee speeds up decay, eating restores hunger.
-/// </summary>
 public class HungerSystem : MonoBehaviour
 {
     [Header("Hunger Settings")]
     public float maxHunger = 100f;
     public float currentHunger = 100f;
-    public float hungerDecayRate = 2f; // Per second
+    public float hungerDecayRate = 2f;
     public float coffeeDecayMultiplier = 1.5f;
     public float coffeeRestoreAmount = 10f;
     public float eatRestoreAmount = 40f;
@@ -30,28 +26,34 @@ public class HungerSystem : MonoBehaviour
     {
         currentHunger = maxHunger;
         
-        // Auto-find hunger slider
-        if (hungerSlider == null)
+        if (GameUIManager.Instance != null)
         {
-            GameObject sliderObj = GameObject.Find("HungerBar");
-            if (sliderObj != null)
-            {
-                hungerSlider = sliderObj.GetComponent<Slider>();
-            }
+            hungerSlider = GameUIManager.Instance.GetHungerSlider();
+            sliderFill = GameUIManager.Instance.GetHungerBarFill();
         }
-        
-        if (hungerSlider != null)
+        else
         {
-            hungerSlider.maxValue = maxHunger;
-            hungerSlider.value = currentHunger;
+            if (hungerSlider == null)
+            {
+                GameObject sliderObj = GameObject.Find("HungerBar");
+                if (sliderObj != null)
+                {
+                    hungerSlider = sliderObj.GetComponent<Slider>();
+                }
+            }
             
-            if (sliderFill == null)
+            if (hungerSlider != null)
             {
-                sliderFill = hungerSlider.fillRect?.GetComponent<Image>();
+                hungerSlider.maxValue = maxHunger;
+                hungerSlider.value = currentHunger;
+                
+                if (sliderFill == null)
+                {
+                    sliderFill = hungerSlider.fillRect?.GetComponent<Image>();
+                }
             }
         }
         
-        // Default gradient (green to red)
         if (hungerGradient == null)
         {
             hungerGradient = new Gradient();
@@ -73,7 +75,6 @@ public class HungerSystem : MonoBehaviour
     
     void Update()
     {
-        // Handle coffee effect timer
         if (coffeeEffectTimer > 0)
         {
             coffeeEffectTimer -= Time.deltaTime;
@@ -83,7 +84,6 @@ public class HungerSystem : MonoBehaviour
             }
         }
         
-        // Decay hunger
         currentHunger -= hungerDecayRate * currentDecayMultiplier * Time.deltaTime;
         currentHunger = Mathf.Clamp(currentHunger, 0, maxHunger);
         
@@ -97,20 +97,24 @@ public class HungerSystem : MonoBehaviour
     
     void UpdateUI()
     {
-        if (hungerSlider != null)
+        if (GameUIManager.Instance != null)
         {
-            hungerSlider.value = currentHunger;
-            
-            if (sliderFill != null && hungerGradient != null)
+            GameUIManager.Instance.UpdateHungerBar(currentHunger, maxHunger);
+        }
+        else
+        {
+            if (hungerSlider != null)
             {
-                sliderFill.color = hungerGradient.Evaluate(currentHunger / maxHunger);
+                hungerSlider.value = currentHunger;
+                
+                if (sliderFill != null && hungerGradient != null)
+                {
+                    sliderFill.color = hungerGradient.Evaluate(currentHunger / maxHunger);
+                }
             }
         }
     }
     
-    /// <summary>
-    /// Drink coffee - restores some hunger but accelerates decay temporarily
-    /// </summary>
     public void DrinkCoffee()
     {
         currentHunger = Mathf.Min(currentHunger + coffeeRestoreAmount, maxHunger);
@@ -119,9 +123,6 @@ public class HungerSystem : MonoBehaviour
         Debug.Log($"[HungerSystem] Drank coffee. Hunger: {currentHunger}, Decay multiplier: {currentDecayMultiplier}");
     }
     
-    /// <summary>
-    /// Eat target - restores significant hunger
-    /// </summary>
     public void Eat()
     {
         currentHunger = Mathf.Min(currentHunger + eatRestoreAmount, maxHunger);
@@ -131,6 +132,5 @@ public class HungerSystem : MonoBehaviour
     void OnHungerDepleted()
     {
         Debug.Log("[HungerSystem] Alien starved to death!");
-        // TODO: Handle alien death
     }
 }

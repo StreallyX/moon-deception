@@ -55,6 +55,7 @@ public class AlienController : MonoBehaviour
         characterController.radius = 0.5f;
         characterController.center = new Vector3(0, 0, 0);
     }
+
     
     void Start()
     {
@@ -103,13 +104,18 @@ public class AlienController : MonoBehaviour
         isControlled = true;
         Cursor.lockState = CursorLockMode.Locked;
         Cursor.visible = false;
-        
+
         // Enable alien camera when alien is controlled
         if (alienCamera != null)
         {
             alienCamera.gameObject.SetActive(true);
         }
-        
+
+        if (GameUIManager.Instance != null)
+        {
+            GameUIManager.Instance.SetPlayerType(PlayerType.Alien);
+        }
+
         Debug.Log("[AlienController] Enabled - Alien is now controlled");
     }
     
@@ -126,7 +132,12 @@ public class AlienController : MonoBehaviour
         {
             alienCamera.gameObject.SetActive(false);
         }
-        
+
+        if (GameUIManager.Instance != null)
+        {
+            GameUIManager.Instance.SetPlayerType(PlayerType.None);
+        }
+
         Debug.Log("[AlienController] Disabled - Alien control released");
     }
     

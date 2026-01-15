@@ -31,7 +31,6 @@ public class PlayerMovement : MonoBehaviour
     {
         controller = GetComponent<CharacterController>();
 
-        // FORCE CharacterController settings to prevent falling through ground
         controller.skinWidth = 0.08f;
         controller.stepOffset = 0.3f;
         controller.minMoveDistance = 0.001f;
@@ -39,6 +38,7 @@ public class PlayerMovement : MonoBehaviour
         controller.radius = 0.5f;
         controller.center = new Vector3(0, 0, 0);
     }
+
 
     void Start()
     {
@@ -76,16 +76,21 @@ public class PlayerMovement : MonoBehaviour
         isControlled = true;
         Cursor.lockState = CursorLockMode.Locked;
         Cursor.visible = false;
-        
+
         // Enable player camera when player is controlled
         if (playerCamera != null)
         {
             playerCamera.gameObject.SetActive(true);
         }
-        
+
+        if (GameUIManager.Instance != null)
+        {
+            GameUIManager.Instance.SetPlayerType(PlayerType.Astronaut);
+        }
+
         Debug.Log("[PlayerMovement] Enabled - Player is now controlled");
     }
-    
+
     void OnDisable()
     {
         if (ActivePlayer == this)
@@ -93,13 +98,18 @@ public class PlayerMovement : MonoBehaviour
             ActivePlayer = null;
         }
         isControlled = false;
-        
+
         // Disable player camera when not controlled
         if (playerCamera != null)
         {
             playerCamera.gameObject.SetActive(false);
         }
-        
+
+        if (GameUIManager.Instance != null)
+        {
+            GameUIManager.Instance.SetPlayerType(PlayerType.None);
+        }
+
         Debug.Log("[PlayerMovement] Disabled - Player control released");
     }
 
