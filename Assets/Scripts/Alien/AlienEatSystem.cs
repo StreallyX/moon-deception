@@ -15,6 +15,7 @@ public class AlienEatSystem : MonoBehaviour
     [Header("References")]
     public HungerSystem hungerSystem;
     public GameObject eatPromptObject;
+    public AlienController alienController;
     
     [Header("Effects")]
     public GameObject bloodDecalPrefab;
@@ -28,6 +29,11 @@ public class AlienEatSystem : MonoBehaviour
         if (hungerSystem == null)
         {
             hungerSystem = GetComponent<HungerSystem>();
+        }
+        
+        if (alienController == null)
+        {
+            alienController = GetComponent<AlienController>();
         }
         
         if (eatPromptObject != null)
@@ -57,29 +63,36 @@ public class AlienEatSystem : MonoBehaviour
     {
         GameObject newTarget = null;
         
-        // Raycast from ALIEN's position at eye level, looking FORWARD (alien's facing direction)
-        // NOT from camera position!
-        Vector3 rayOrigin = transform.position + Vector3.up * 1.5f; // Eye level
-        Vector3 rayDirection = transform.forward; // Alien's facing direction
+        Camera alienCamera = alienController != null ? alienController.GetCamera() : null;
+        
+        Vector3 rayOrigin;
+        Vector3 rayDirection;
+        
+        if (alienCamera != null)
+        {
+            rayOrigin = transform.position + Vector3.up * 1.5f;
+            rayDirection = alienCamera.transform.forward;
+        }
+        else
+        {
+            rayOrigin = transform.position + Vector3.up * 1.5f;
+            rayDirection = transform.forward;
+        }
         
         Ray ray = new Ray(rayOrigin, rayDirection);
         RaycastHit[] hits = Physics.RaycastAll(ray, detectRange);
         
-        // Debug visualization
         Debug.DrawRay(rayOrigin, rayDirection * detectRange, Color.green);
         
-        // Sort by distance to get closest first
         System.Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
         
         foreach (RaycastHit hit in hits)
         {
-            // Skip self
             if (hit.transform == transform) continue;
             if (hit.transform.root == transform.root) continue;
             if (hit.transform.IsChildOf(transform)) continue;
             if (transform.IsChildOf(hit.transform)) continue;
             
-            // Check if edible
             if (IsEdible(hit.collider.gameObject))
             {
                 newTarget = hit.collider.gameObject;
@@ -87,7 +100,6 @@ public class AlienEatSystem : MonoBehaviour
             }
         }
         
-        // Update target highlighting
         if (newTarget != currentTarget)
         {
             if (currentTarget != null && currentHighlight != null)
@@ -120,19 +132,16 @@ public class AlienEatSystem : MonoBehaviour
     
     bool IsEdible(GameObject target)
     {
-        // NEVER eat the player
         if (target.CompareTag(playerTag))
         {
             return false;
         }
         
-        // NEVER eat self
         if (target == gameObject || target.transform.root == transform.root)
         {
             return false;
         }
         
-        // Check if target has edible tag
         foreach (string tag in edibleTags)
         {
             if (target.CompareTag(tag))
@@ -141,7 +150,6 @@ public class AlienEatSystem : MonoBehaviour
             }
         }
         
-        // Also check parent objects
         Transform parent = target.transform.parent;
         while (parent != null)
         {

@@ -53,7 +53,7 @@ public class AlienController : MonoBehaviour
         characterController.minMoveDistance = 0.001f;
         characterController.height = 2f;
         characterController.radius = 0.5f;
-        characterController.center = new Vector3(0, 1f, 0);
+        characterController.center = new Vector3(0, 0, 0);
     }
     
     void Start()

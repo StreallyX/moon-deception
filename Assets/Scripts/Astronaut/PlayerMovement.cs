@@ -30,14 +30,14 @@ public class PlayerMovement : MonoBehaviour
     void Awake()
     {
         controller = GetComponent<CharacterController>();
-        
+
         // FORCE CharacterController settings to prevent falling through ground
         controller.skinWidth = 0.08f;
         controller.stepOffset = 0.3f;
         controller.minMoveDistance = 0.001f;
         controller.height = 2f;
         controller.radius = 0.5f;
-        controller.center = new Vector3(0, 1f, 0);
+        controller.center = new Vector3(0, 0, 0);
     }
 
     void Start()
