@@ -74,6 +74,7 @@ public class AudioManager : MonoBehaviour
     void Start()
     {
         LoadVolumeSettings();
+        LoadAudioFromResources();
 
         if (ambientLoop != null)
         {
@@ -81,6 +82,53 @@ public class AudioManager : MonoBehaviour
         }
 
         Debug.Log("[AudioManager] Initialized");
+    }
+
+    /// <summary>
+    /// Try to load audio clips from Resources/Audio folder if not assigned
+    /// </summary>
+    void LoadAudioFromResources()
+    {
+        // Gun sounds
+        if (gunShot == null)
+            gunShot = Resources.Load<AudioClip>("Audio/gunshot") ?? Resources.Load<AudioClip>("Audio/gunshot_pistol");
+        if (gunEmpty == null)
+            gunEmpty = Resources.Load<AudioClip>("Audio/empty_clip");
+        if (gunReload == null)
+            gunReload = Resources.Load<AudioClip>("Audio/reload_pistol");
+
+        // Impact sounds
+        if (bulletImpactFlesh == null)
+            bulletImpactFlesh = Resources.Load<AudioClip>("Audio/impact_flesh");
+        if (bulletImpactMetal == null)
+            bulletImpactMetal = Resources.Load<AudioClip>("Audio/impact_metal");
+        if (bulletImpactConcrete == null)
+            bulletImpactConcrete = Resources.Load<AudioClip>("Audio/impact_concrete");
+
+        // UI sounds
+        if (uiClick == null)
+            uiClick = Resources.Load<AudioClip>("Audio/ui_click");
+        if (uiHover == null)
+            uiHover = Resources.Load<AudioClip>("Audio/ui_hover");
+        if (uiBack == null)
+            uiBack = Resources.Load<AudioClip>("Audio/ui_back");
+
+        // Game events
+        if (npcDeath == null)
+            npcDeath = Resources.Load<AudioClip>("Audio/npc_death");
+        if (alienReveal == null)
+            alienReveal = Resources.Load<AudioClip>("Audio/alien_reveal");
+        if (alarmSound == null)
+            alarmSound = Resources.Load<AudioClip>("Audio/alarm");
+
+        // Log what was loaded
+        int loadedCount = 0;
+        if (gunShot != null) loadedCount++;
+        if (bulletImpactFlesh != null) loadedCount++;
+        if (bulletImpactMetal != null) loadedCount++;
+        if (uiClick != null) loadedCount++;
+
+        Debug.Log($"[AudioManager] Loaded {loadedCount} audio clips from Resources/Audio/");
     }
 
     void InitializeAudioSources()
@@ -208,6 +256,12 @@ public class AudioManager : MonoBehaviour
 
     public void PlayGunshot()
     {
+        if (gunShot == null)
+        {
+            Debug.LogWarning("[AudioManager] gunShot clip is NOT assigned! Assign it in the Inspector.");
+            return;
+        }
+        Debug.Log($"[AudioManager] Playing gunshot: {gunShot.name}");
         PlaySFXWithPitch(gunShot, 0.95f, 1.05f, 1f);
     }
 

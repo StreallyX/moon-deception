@@ -88,14 +88,29 @@ public class GameManager : MonoBehaviour
 
     void Start()
     {
-        // Subscribe to stress events
+        // Auto-start for testing (remove in multiplayer)
+        StartGame();
+
+        // Subscribe to stress events AFTER StartGame finds the stress system
+        SubscribeToStressSystem();
+    }
+
+    void SubscribeToStressSystem()
+    {
+        if (astronautStress == null)
+        {
+            astronautStress = FindObjectOfType<StressSystem>();
+        }
+
         if (astronautStress != null)
         {
             astronautStress.OnStressMaxed.AddListener(TriggerChaosPhase);
+            Debug.Log("[GameManager] Subscribed to StressSystem.OnStressMaxed");
         }
-
-        // Auto-start for testing (remove in multiplayer)
-        StartGame();
+        else
+        {
+            Debug.LogWarning("[GameManager] Could not find StressSystem to subscribe!");
+        }
     }
 
     void Update()
@@ -235,12 +250,17 @@ public class GameManager : MonoBehaviour
     /// </summary>
     public void TriggerChaosPhase()
     {
-        if (currentPhase != GamePhase.Playing) return;
+        if (currentPhase != GamePhase.Playing)
+        {
+            Debug.Log($"[GameManager] TriggerChaosPhase called but phase is {currentPhase}, not Playing");
+            return;
+        }
 
         currentPhase = GamePhase.Chaos;
-        Debug.Log("[GameManager] CHAOS PHASE ACTIVATED!");
+        Debug.Log("[GameManager] ========== CHAOS PHASE ACTIVATED! ==========");
 
         // Transform all aliens
+        Debug.Log($"[GameManager] Transforming {activeAliens.Count} aliens...");
         foreach (var alien in activeAliens)
         {
             if (alien != null)
@@ -253,6 +273,8 @@ public class GameManager : MonoBehaviour
         TriggerAlarm();
         TurnOffLights();
 
+        // Invoke chaos event for all subscribers
+        Debug.Log($"[GameManager] Invoking OnChaosPhase event (listeners count: {OnChaosPhase?.GetPersistentEventCount()})");
         OnChaosPhase?.Invoke();
     }
 

@@ -162,8 +162,8 @@ public class AlienHealth : MonoBehaviour, IDamageable
 
     void UpdateUI()
     {
-        // Update alien health UI if controlled
-        if (AlienController.IsAlienControlled && GameUIManager.Instance != null)
+        // Always update alien health UI (even when not controlled, for when we switch)
+        if (GameUIManager.Instance != null)
         {
             GameUIManager.Instance.UpdateAlienHealthBar(currentHealth, maxHealth);
         }

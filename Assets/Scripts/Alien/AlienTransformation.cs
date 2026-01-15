@@ -68,6 +68,12 @@ public class AlienTransformation : MonoBehaviour
         {
             GameManager.Instance.OnChaosPhase.AddListener(OnChaosPhaseStarted);
             GameManager.Instance.OnGameEnd.AddListener(OnGameEnded);
+            Debug.Log("[AlienTransformation] Subscribed to GameManager events");
+        }
+        else
+        {
+            Debug.LogWarning("[AlienTransformation] GameManager.Instance is null, will retry...");
+            StartCoroutine(LateSubscribe());
         }
 
         // Find astronaut
@@ -78,6 +84,24 @@ public class AlienTransformation : MonoBehaviour
         }
 
         Debug.Log("[AlienTransformation] Initialized");
+    }
+
+    System.Collections.IEnumerator LateSubscribe()
+    {
+        // Wait for GameManager to be ready
+        yield return null;
+        yield return null;
+
+        if (GameManager.Instance != null)
+        {
+            GameManager.Instance.OnChaosPhase.AddListener(OnChaosPhaseStarted);
+            GameManager.Instance.OnGameEnd.AddListener(OnGameEnded);
+            Debug.Log("[AlienTransformation] Late-subscribed to GameManager events");
+        }
+        else
+        {
+            Debug.LogError("[AlienTransformation] Still can't find GameManager!");
+        }
     }
 
     void Update()

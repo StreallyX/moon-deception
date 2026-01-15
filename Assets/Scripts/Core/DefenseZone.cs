@@ -178,7 +178,27 @@ public class DefenseZone : MonoBehaviour
         isActive = true;
         weaponCollected = false;
 
-        zoneMaterial.color = activeColor;
+        Debug.Log($"[DefenseZone] {zoneName} ActivateZone called! zoneMaterial={zoneMaterial != null}, zoneRenderer={zoneRenderer != null}");
+
+        // Ensure visuals are set up
+        if (zoneMaterial == null || zoneRenderer == null)
+        {
+            SetupVisuals();
+        }
+
+        if (zoneMaterial != null)
+        {
+            zoneMaterial.color = activeColor;
+
+            // Force apply material to renderer
+            if (zoneRenderer != null)
+            {
+                zoneRenderer.material = zoneMaterial;
+                zoneRenderer.material.color = activeColor;
+            }
+
+            Debug.Log($"[DefenseZone] Material color set to activeColor: {activeColor}");
+        }
 
         if (zoneLight != null)
         {

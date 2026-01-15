@@ -202,16 +202,33 @@ public class PlayerShooting : MonoBehaviour
 
         if (Physics.Raycast(ray, out hit, range, hitLayers))
         {
+            // DEBUG: Log what we hit
+            Debug.Log($"[Shooting] HIT: {hit.collider.gameObject.name} (Layer: {LayerMask.LayerToName(hit.collider.gameObject.layer)})");
+
             if (showDebugRay)
             {
                 Debug.DrawLine(ray.origin, hit.point, hitColor, debugRayDuration);
                 ShowShotLine(ray.origin, hit.point, hitColor);
             }
 
+            // Try to get components on the hit object OR its parent (for child meshes)
             var damageable = hit.collider.GetComponent<IDamageable>();
             var npc = hit.collider.GetComponent<NPCBehavior>();
             var alienController = hit.collider.GetComponent<AlienController>();
             var alienHealth = hit.collider.GetComponent<AlienHealth>();
+
+            // If not found on hit object, check parent hierarchy
+            if (damageable == null)
+                damageable = hit.collider.GetComponentInParent<IDamageable>();
+            if (npc == null)
+                npc = hit.collider.GetComponentInParent<NPCBehavior>();
+            if (alienController == null)
+                alienController = hit.collider.GetComponentInParent<AlienController>();
+            if (alienHealth == null)
+                alienHealth = hit.collider.GetComponentInParent<AlienHealth>();
+
+            // DEBUG: Log what components we found
+            Debug.Log($"[Shooting] Components (with parent check) - IDamageable:{damageable != null}, NPC:{npc != null}, AlienController:{alienController != null}, AlienHealth:{alienHealth != null}");
 
             if (damageable != null)
             {

@@ -142,7 +142,7 @@ public class GameController : MonoBehaviour
     public void SwitchToAlien()
     {
         isPlayerActive = false;
-        
+
         // Disable player controller and camera
         if (playerMovement != null)
         {
@@ -152,7 +152,7 @@ public class GameController : MonoBehaviour
         {
             playerCamera.gameObject.SetActive(false);
         }
-        
+
         // Enable alien controller and camera
         if (alienController != null)
         {
@@ -162,7 +162,28 @@ public class GameController : MonoBehaviour
         {
             alienCamera.gameObject.SetActive(true);
         }
-        
+
+        // Check if we're in chaos mode and update UI accordingly
+        if (alienController != null)
+        {
+            var transformation = alienController.GetComponent<AlienTransformation>();
+            if (transformation != null && transformation.IsTransformed)
+            {
+                // We're in chaos mode - update UI
+                if (GameUIManager.Instance != null)
+                {
+                    GameUIManager.Instance.SetChaosMode(true);
+
+                    // Also update HP bar
+                    var alienHealth = alienController.GetComponent<AlienHealth>();
+                    if (alienHealth != null)
+                    {
+                        GameUIManager.Instance.UpdateAlienHealthBar(alienHealth.currentHealth, alienHealth.maxHealth);
+                    }
+                }
+            }
+        }
+
         Debug.Log("[GameController] Switched to ALIEN control");
     }
     

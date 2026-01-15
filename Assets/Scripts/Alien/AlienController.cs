@@ -121,6 +121,20 @@ public class AlienController : MonoBehaviour
         if (GameUIManager.Instance != null)
         {
             GameUIManager.Instance.SetPlayerType(PlayerType.Alien);
+
+            // Check if we're in chaos mode and update UI
+            var transformation = GetComponent<AlienTransformation>();
+            if (transformation != null && transformation.IsTransformed)
+            {
+                GameUIManager.Instance.SetChaosMode(true);
+
+                // Update HP bar with current values
+                var alienHealth = GetComponent<AlienHealth>();
+                if (alienHealth != null)
+                {
+                    GameUIManager.Instance.UpdateAlienHealthBar(alienHealth.currentHealth, alienHealth.maxHealth);
+                }
+            }
         }
 
         Debug.Log("[AlienController] Enabled - Alien is now controlled");
