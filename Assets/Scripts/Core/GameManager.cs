@@ -144,10 +144,26 @@ public class GameManager : MonoBehaviour
         innocentsKilled = 0;
         aliensRemaining = 0;
 
+        // Use SpawnManager to set up entities (aliens, defense zones, interactables)
+        if (SpawnManager.Instance != null)
+        {
+            SpawnManager.Instance.SpawnAllEntities();
+        }
+
         // Find all NPCs and aliens in scene
         activeNPCs.AddRange(FindObjectsOfType<NPCBehavior>());
         activeAliens.AddRange(FindObjectsOfType<AlienController>());
-        aliensRemaining = activeAliens.Count;
+
+        // Count aliens assigned to NPCs
+        int alienNPCCount = 0;
+        foreach (var npc in activeNPCs)
+        {
+            if (npc != null && npc.IsAlien)
+            {
+                alienNPCCount++;
+            }
+        }
+        aliensRemaining = activeAliens.Count + alienNPCCount;
 
         // Find astronaut stress system if not assigned
         if (astronautStress == null)

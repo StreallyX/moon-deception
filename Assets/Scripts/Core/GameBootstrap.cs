@@ -12,6 +12,8 @@ public class GameBootstrap : MonoBehaviour
     public bool createMenuManager = true;
     public bool createPostProcessController = true;
     public bool createChaosLightingController = true;
+    public bool createMapManager = true;
+    public bool createSpawnManager = true;
 
     [Header("Player Setup")]
     public bool addCameraShakeToPlayer = true;
@@ -71,6 +73,24 @@ public class GameBootstrap : MonoBehaviour
             chaosLightingObj.AddComponent<ChaosLightingController>();
             DontDestroyOnLoad(chaosLightingObj);
             Debug.Log("[GameBootstrap] Created ChaosLightingController");
+        }
+
+        // Map Manager
+        if (createMapManager && MapManager.Instance == null)
+        {
+            GameObject mapManagerObj = new GameObject("MapManager");
+            mapManagerObj.AddComponent<MapManager>();
+            DontDestroyOnLoad(mapManagerObj);
+            Debug.Log("[GameBootstrap] Created MapManager");
+        }
+
+        // Spawn Manager
+        if (createSpawnManager && SpawnManager.Instance == null)
+        {
+            GameObject spawnManagerObj = new GameObject("SpawnManager");
+            spawnManagerObj.AddComponent<SpawnManager>();
+            DontDestroyOnLoad(spawnManagerObj);
+            Debug.Log("[GameBootstrap] Created SpawnManager");
         }
 
         // Add CameraShake to player camera

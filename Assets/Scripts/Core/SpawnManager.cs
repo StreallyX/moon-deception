@@ -1,0 +1,428 @@
+using UnityEngine;
+using UnityEngine.Events;
+using System.Collections.Generic;
+
+/// <summary>
+/// Handles spawning of entities (NPCs, defense zones, interactables) with randomization rules.
+/// Works with MapManager to respect zone boundaries and distance requirements.
+/// </summary>
+public class SpawnManager : MonoBehaviour
+{
+    public static SpawnManager Instance { get; private set; }
+
+    [Header("Spawn Settings")]
+    [Tooltip("Number of aliens to assign among NPCs")]
+    public int aliensToAssign = 3;
+
+    [Tooltip("Minimum distance defense zones must spawn from astronaut")]
+    public float minDefenseZoneDistance = 20f;
+
+    [Tooltip("Number of defense zones to spawn")]
+    public int defenseZonesToSpawn = 2;
+
+    [Header("Interactables Per Zone")]
+    public int coffeeMachinesPerZone = 2;
+    public int alarmTerminalsPerZone = 1;
+
+    [Header("Prefabs (Optional)")]
+    [Tooltip("If null, existing scene NPCs will be used")]
+    public GameObject npcPrefab;
+    public GameObject defenseZonePrefab;
+    public GameObject coffeeMachinePrefab;
+    public GameObject alarmTerminalPrefab;
+
+    [Header("Events")]
+    public UnityEvent OnSpawningComplete;
+
+    [Header("Debug")]
+    [SerializeField] private List<DefenseZone> spawnedDefenseZones = new List<DefenseZone>();
+    [SerializeField] private List<CoffeeMachine> spawnedCoffeeMachines = new List<CoffeeMachine>();
+    [SerializeField] private List<AlarmTerminal> spawnedAlarmTerminals = new List<AlarmTerminal>();
+
+    private Transform astronautTransform;
+
+    void Awake()
+    {
+        if (Instance == null)
+        {
+            Instance = this;
+            DontDestroyOnLoad(gameObject);
+        }
+        else
+        {
+            Destroy(gameObject);
+            return;
+        }
+    }
+
+    void Start()
+    {
+        // Find astronaut
+        var player = FindObjectOfType<PlayerMovement>();
+        if (player != null)
+        {
+            astronautTransform = player.transform;
+        }
+    }
+
+    /// <summary>
+    /// Main entry point: spawns/assigns all entities
+    /// Called by GameManager.StartGame()
+    /// </summary>
+    public void SpawnAllEntities()
+    {
+        Debug.Log("[SpawnManager] ========== SPAWNING ENTITIES ==========");
+
+        // Find astronaut position
+        if (astronautTransform == null)
+        {
+            var player = FindObjectOfType<PlayerMovement>();
+            if (player != null)
+            {
+                astronautTransform = player.transform;
+            }
+        }
+
+        // 1. Assign aliens to existing NPCs
+        AssignAliensToNPCs(aliensToAssign);
+
+        // 2. Spawn defense zones
+        SpawnDefenseZones();
+
+        // 3. Spawn interactables
+        SpawnInteractables();
+
+        Debug.Log("[SpawnManager] ========== SPAWNING COMPLETE ==========");
+        OnSpawningComplete?.Invoke();
+    }
+
+    // ==================== ALIEN ASSIGNMENT ====================
+
+    /// <summary>
+    /// Randomly assigns aliens among existing NPCs using Fisher-Yates shuffle
+    /// </summary>
+    public void AssignAliensToNPCs(int alienCount)
+    {
+        NPCBehavior[] allNPCs = FindObjectsOfType<NPCBehavior>();
+
+        if (allNPCs.Length == 0)
+        {
+            Debug.LogWarning("[SpawnManager] No NPCs found to assign as aliens!");
+            return;
+        }
+
+        // Create shuffled list
+        List<NPCBehavior> shuffledNPCs = new List<NPCBehavior>(allNPCs);
+        ShuffleList(shuffledNPCs);
+
+        // Assign first N as aliens
+        int assigned = 0;
+        for (int i = 0; i < Mathf.Min(alienCount, shuffledNPCs.Count); i++)
+        {
+            if (shuffledNPCs[i] != null)
+            {
+                shuffledNPCs[i].SetAsAlien(true);
+                assigned++;
+                Debug.Log($"[SpawnManager] NPC '{shuffledNPCs[i].Name}' assigned as ALIEN");
+            }
+        }
+
+        Debug.Log($"[SpawnManager] Assigned {assigned} aliens among {allNPCs.Length} NPCs");
+    }
+
+    // ==================== DEFENSE ZONE SPAWNING ====================
+
+    /// <summary>
+    /// Spawn defense zones at valid positions (respecting min distance from astronaut)
+    /// </summary>
+    public void SpawnDefenseZones()
+    {
+        spawnedDefenseZones.Clear();
+
+        Vector3 astronautPos = astronautTransform != null ? astronautTransform.position : Vector3.zero;
+
+        // Get valid spawn points
+        List<Transform> validPoints = new List<Transform>();
+
+        if (MapManager.Instance != null)
+        {
+            validPoints = MapManager.Instance.GetValidDefenseZoneSpawnPoints(astronautPos);
+        }
+
+        // If no MapManager or no valid points, find existing DefenseZones and use fallback
+        if (validPoints.Count == 0)
+        {
+            Debug.Log("[SpawnManager] No valid defense zone spawn points from MapManager, using fallback");
+
+            // Check for existing defense zones in scene
+            DefenseZone[] existingZones = FindObjectsOfType<DefenseZone>();
+            if (existingZones.Length > 0)
+            {
+                spawnedDefenseZones.AddRange(existingZones);
+                Debug.Log($"[SpawnManager] Found {existingZones.Length} existing defense zones");
+                return;
+            }
+
+            // Create fallback spawn points if nothing exists
+            validPoints = CreateFallbackDefenseSpawnPoints(astronautPos);
+        }
+
+        // Shuffle valid points
+        ShuffleList(validPoints);
+
+        // Spawn defense zones at selected points
+        int spawned = 0;
+        for (int i = 0; i < Mathf.Min(defenseZonesToSpawn, validPoints.Count); i++)
+        {
+            if (validPoints[i] == null) continue;
+
+            DefenseZone zone = SpawnDefenseZoneAt(validPoints[i].position);
+            if (zone != null)
+            {
+                spawnedDefenseZones.Add(zone);
+                spawned++;
+            }
+        }
+
+        Debug.Log($"[SpawnManager] Spawned {spawned} defense zones (target: {defenseZonesToSpawn})");
+    }
+
+    DefenseZone SpawnDefenseZoneAt(Vector3 position)
+    {
+        GameObject zoneObj;
+
+        if (defenseZonePrefab != null)
+        {
+            zoneObj = Instantiate(defenseZonePrefab, position, Quaternion.identity);
+        }
+        else
+        {
+            zoneObj = new GameObject($"DefenseZone_{spawnedDefenseZones.Count + 1}");
+            zoneObj.transform.position = position;
+            zoneObj.AddComponent<DefenseZone>();
+        }
+
+        var zone = zoneObj.GetComponent<DefenseZone>();
+        if (zone != null)
+        {
+            zone.zoneName = $"Defense Point {(char)('A' + spawnedDefenseZones.Count)}";
+            Debug.Log($"[SpawnManager] Created defense zone '{zone.zoneName}' at {position}");
+        }
+
+        return zone;
+    }
+
+    List<Transform> CreateFallbackDefenseSpawnPoints(Vector3 astronautPos)
+    {
+        List<Transform> fallbackPoints = new List<Transform>();
+
+        // Create spawn points in cardinal directions, away from astronaut
+        Vector3[] directions = { Vector3.forward, Vector3.back, Vector3.left, Vector3.right };
+
+        foreach (var dir in directions)
+        {
+            Vector3 spawnPos = astronautPos + dir * (minDefenseZoneDistance + 10f);
+
+            GameObject pointObj = new GameObject($"FallbackDefenseSpawn");
+            pointObj.transform.position = spawnPos;
+            pointObj.transform.SetParent(transform);
+
+            fallbackPoints.Add(pointObj.transform);
+        }
+
+        return fallbackPoints;
+    }
+
+    // ==================== INTERACTABLE SPAWNING ====================
+
+    /// <summary>
+    /// Spawn coffee machines and alarm terminals in each zone
+    /// </summary>
+    public void SpawnInteractables()
+    {
+        spawnedCoffeeMachines.Clear();
+        spawnedAlarmTerminals.Clear();
+
+        if (MapManager.Instance == null || MapManager.Instance.ZoneCount == 0)
+        {
+            Debug.Log("[SpawnManager] No zones registered, spawning interactables at fallback positions");
+            SpawnInteractablesAtFallback();
+            return;
+        }
+
+        // Spawn in each zone
+        foreach (var zone in MapManager.Instance.AllZones)
+        {
+            if (zone == null) continue;
+
+            SpawnInteractablesInZone(zone);
+        }
+
+        Debug.Log($"[SpawnManager] Spawned {spawnedCoffeeMachines.Count} coffee machines, {spawnedAlarmTerminals.Count} alarm terminals");
+    }
+
+    void SpawnInteractablesInZone(MapZone zone)
+    {
+        List<Transform> spawnPoints = new List<Transform>(zone.interactableSpawnPoints ?? new Transform[0]);
+
+        if (spawnPoints.Count == 0)
+        {
+            Debug.Log($"[SpawnManager] Zone '{zone.zoneName}' has no interactable spawn points");
+            return;
+        }
+
+        ShuffleList(spawnPoints);
+
+        int pointIndex = 0;
+
+        // Spawn coffee machines
+        for (int i = 0; i < coffeeMachinesPerZone && pointIndex < spawnPoints.Count; i++)
+        {
+            if (spawnPoints[pointIndex] != null)
+            {
+                var coffee = SpawnCoffeeMachineAt(spawnPoints[pointIndex].position);
+                if (coffee != null)
+                {
+                    spawnedCoffeeMachines.Add(coffee);
+                }
+            }
+            pointIndex++;
+        }
+
+        // Spawn alarm terminals
+        for (int i = 0; i < alarmTerminalsPerZone && pointIndex < spawnPoints.Count; i++)
+        {
+            if (spawnPoints[pointIndex] != null)
+            {
+                var alarm = SpawnAlarmTerminalAt(spawnPoints[pointIndex].position);
+                if (alarm != null)
+                {
+                    spawnedAlarmTerminals.Add(alarm);
+                }
+            }
+            pointIndex++;
+        }
+
+        Debug.Log($"[SpawnManager] Zone '{zone.zoneName}': spawned interactables");
+    }
+
+    void SpawnInteractablesAtFallback()
+    {
+        // Spawn a few interactables near center if no zones exist
+        Vector3 center = Vector3.zero;
+
+        if (astronautTransform != null)
+        {
+            center = astronautTransform.position;
+        }
+
+        // Spawn 2 coffee machines
+        for (int i = 0; i < 2; i++)
+        {
+            Vector3 pos = center + new Vector3(Random.Range(-15f, 15f), 0f, Random.Range(-15f, 15f));
+            var coffee = SpawnCoffeeMachineAt(pos);
+            if (coffee != null)
+            {
+                spawnedCoffeeMachines.Add(coffee);
+            }
+        }
+
+        // Spawn 1 alarm terminal
+        Vector3 alarmPos = center + new Vector3(Random.Range(-20f, 20f), 0f, Random.Range(-20f, 20f));
+        var alarm = SpawnAlarmTerminalAt(alarmPos);
+        if (alarm != null)
+        {
+            spawnedAlarmTerminals.Add(alarm);
+        }
+    }
+
+    CoffeeMachine SpawnCoffeeMachineAt(Vector3 position)
+    {
+        GameObject coffeeObj;
+
+        if (coffeeMachinePrefab != null)
+        {
+            coffeeObj = Instantiate(coffeeMachinePrefab, position, Quaternion.identity);
+        }
+        else
+        {
+            coffeeObj = new GameObject($"CoffeeMachine_{spawnedCoffeeMachines.Count + 1}");
+            coffeeObj.transform.position = position;
+            coffeeObj.AddComponent<CoffeeMachine>();
+        }
+
+        var coffee = coffeeObj.GetComponent<CoffeeMachine>();
+        Debug.Log($"[SpawnManager] Created coffee machine at {position}");
+        return coffee;
+    }
+
+    AlarmTerminal SpawnAlarmTerminalAt(Vector3 position)
+    {
+        GameObject alarmObj;
+
+        if (alarmTerminalPrefab != null)
+        {
+            alarmObj = Instantiate(alarmTerminalPrefab, position, Quaternion.identity);
+        }
+        else
+        {
+            alarmObj = new GameObject($"AlarmTerminal_{spawnedAlarmTerminals.Count + 1}");
+            alarmObj.transform.position = position;
+            alarmObj.AddComponent<AlarmTerminal>();
+        }
+
+        var alarm = alarmObj.GetComponent<AlarmTerminal>();
+        Debug.Log($"[SpawnManager] Created alarm terminal at {position}");
+        return alarm;
+    }
+
+    // ==================== UTILITY ====================
+
+    /// <summary>
+    /// Fisher-Yates shuffle
+    /// </summary>
+    public static void ShuffleList<T>(List<T> list)
+    {
+        for (int i = list.Count - 1; i > 0; i--)
+        {
+            int j = Random.Range(0, i + 1);
+            T temp = list[i];
+            list[i] = list[j];
+            list[j] = temp;
+        }
+    }
+
+    /// <summary>
+    /// Clear all spawned entities (for game reset)
+    /// </summary>
+    public void ClearSpawnedEntities()
+    {
+        foreach (var zone in spawnedDefenseZones)
+        {
+            if (zone != null) Destroy(zone.gameObject);
+        }
+        spawnedDefenseZones.Clear();
+
+        foreach (var coffee in spawnedCoffeeMachines)
+        {
+            if (coffee != null) Destroy(coffee.gameObject);
+        }
+        spawnedCoffeeMachines.Clear();
+
+        foreach (var alarm in spawnedAlarmTerminals)
+        {
+            if (alarm != null) Destroy(alarm.gameObject);
+        }
+        spawnedAlarmTerminals.Clear();
+
+        Debug.Log("[SpawnManager] Cleared all spawned entities");
+    }
+
+    void OnDestroy()
+    {
+        if (Instance == this)
+        {
+            Instance = null;
+        }
+    }
+}

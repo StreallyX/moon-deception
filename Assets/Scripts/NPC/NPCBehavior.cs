@@ -41,6 +41,9 @@ public class NPCBehavior : MonoBehaviour, IDamageable
     [Header("Behavior Flags")]
     [SerializeField] private bool isAlien = false;
 
+    [Header("Zone")]
+    [SerializeField] private MapZone assignedZone;
+
     private int currentWaypointIndex = 0;
     private float idleTimer = 0f;
     private float stateTimer = 0f;
@@ -51,6 +54,7 @@ public class NPCBehavior : MonoBehaviour, IDamageable
     public NPCState CurrentState => currentState;
     public bool IsAlien => isAlien;
     public string Name => npcName;
+    public MapZone AssignedZone => assignedZone;
 
     void Start()
     {
@@ -289,6 +293,39 @@ public class NPCBehavior : MonoBehaviour, IDamageable
     public void AddWaypoint(Transform waypoint)
     {
         waypoints.Add(waypoint);
+    }
+
+    /// <summary>
+    /// Assign this NPC to a zone and use its patrol waypoints
+    /// </summary>
+    public void SetZone(MapZone zone)
+    {
+        assignedZone = zone;
+
+        if (zone != null && zone.patrolWaypoints != null && zone.patrolWaypoints.Length > 0)
+        {
+            waypoints.Clear();
+            foreach (var wp in zone.patrolWaypoints)
+            {
+                if (wp != null)
+                {
+                    waypoints.Add(wp);
+                }
+            }
+
+            // Update patrol center to zone center
+            startPosition = zone.transform.position;
+
+            Debug.Log($"[NPC] {npcName} assigned to zone '{zone.zoneName}' with {waypoints.Count} waypoints");
+        }
+    }
+
+    /// <summary>
+    /// Clear zone assignment
+    /// </summary>
+    public void ClearZone()
+    {
+        assignedZone = null;
     }
 
     void OnDrawGizmosSelected()

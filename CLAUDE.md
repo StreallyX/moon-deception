@@ -29,6 +29,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | `CameraShake` | Screen shake effects |
 | `PostProcessController` | URP post-processing tied to stress |
 | `MenuManager` | All menus (Main, Pause, Settings, GameOver) |
+| `MapManager` | Zone management, spawn point validation |
+| `SpawnManager` | Random spawning with distance rules |
 
 ### Game Phases
 ```
@@ -68,6 +70,23 @@ Subscribe in Start() with null check + LateSubscribe coroutine fallback.
 `GameBootstrap.cs` auto-creates managers and adds components:
 - Adds `AlienHealth`, `AlienAbilities`, `AlienTransformation` to alien
 - Adds `AstronautHealth`, `CameraShake` to astronaut
+- Creates `MapManager`, `SpawnManager` singletons
+
+### Map & Zone System
+- `MapZone.cs` - Define zones with BoxCollider boundaries
+- Each zone has: npcSpawnPoints[], defenseZoneSpawnPoints[], interactableSpawnPoints[], patrolWaypoints[]
+- `MapManager.Instance.GetValidDefenseZoneSpawnPoints(astronautPos)` - respects min distance
+
+### Interactables
+Base class: `Interactable.cs` - proximity detection, cooldowns, role filtering
+- `CoffeeMachine.cs` - Alien-only, +40 hunger, 10s cooldown
+- `AlarmTerminal.cs` - Alien-only, +10 stress (if astronaut in 30m), panics NPCs
+
+### Spawn System
+`SpawnManager.cs` called by `GameManager.StartGame()`:
+- `AssignAliensToNPCs(count)` - Fisher-Yates shuffle, random assignment
+- Defense zones spawn min 20m from astronaut
+- Interactables spawn per zone (2 coffee, 1 alarm per zone)
 
 ## Controls
 
@@ -156,10 +175,18 @@ Assets/Scripts/
 │   └── HungerSystem.cs
 ├── NPC/
 │   └── NPCBehavior.cs
+├── Map/
+│   └── MapZone.cs
+├── Interactables/
+│   ├── Interactable.cs (base class)
+│   ├── CoffeeMachine.cs
+│   └── AlarmTerminal.cs
 ├── Core/
 │   ├── GameManager.cs
 │   ├── GameController.cs (TAB switch)
 │   ├── GameBootstrap.cs (auto-init)
+│   ├── MapManager.cs
+│   ├── SpawnManager.cs
 │   ├── AudioManager.cs
 │   ├── CameraShake.cs
 │   ├── PostProcessController.cs
@@ -176,7 +203,7 @@ Assets/Scripts/
 Track in `DEV_TRACKER.md`:
 - **Phase 1**: Solo Astronaut FPS ✅
 - **Phase 2**: Solo Alien TPS ✅
-- **Phase 3**: Map & Gameplay Loop (TODO)
+- **Phase 3**: Map & Gameplay Loop - CODE DONE, needs Unity scene setup
 - **Phase 4**: Multiplayer - Netcode for GameObjects (TODO)
 - **Phase 5**: Steam Integration - Steamworks.NET (TODO)
 

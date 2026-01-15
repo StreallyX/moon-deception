@@ -1,8 +1,8 @@
 # Moon Deception - Development Tracker
 
-## Current Phase: 2 - Solo Alien (TPS) - COMPLETE ✅
+## Current Phase: 3 - Map & Gameplay Loop - IN PROGRESS
 ## Current Branch: phase1-fps
-## Next: Phase 3 - Map & Gameplay Loop
+## Next: Phase 4 - Multiplayer
 
 ---
 
@@ -69,12 +69,17 @@
 ---
 
 ## Phase 3 Checklist: Map & Gameplay Loop
-- [ ] 4 Map sections (Habitat, Research, Industrial, Command)
-- [ ] SpawnSystem - Random alien spawn among NPCs
-- [ ] DefensePoints - Strategic positions with machine gun
+- [x] MapZone.cs - Zone definition with boundaries, spawn points, patrol waypoints
+- [x] MapManager.cs - Central zone management, distance-based spawn validation
+- [x] SpawnManager.cs - Random alien assignment, defense zone spawning with rules
+- [x] Interactable.cs - Base class for all interactables
+- [x] CoffeeMachine.cs - Alien uses to restore hunger (+40)
+- [x] AlarmTerminal.cs - Alien uses to stress astronaut (+10, panic NPCs)
 - [x] WinConditions - In GameManager (astronaut wins / aliens win)
 - [x] GameTimer - In GameManager (10 min default)
-- [ ] Interactables - Coffee machines, terminals
+- [ ] 4 Map sections setup in Unity (Habitat, Research, Industrial, Command)
+- [ ] Prefabs creation (Zone, CoffeeMachine, AlarmTerminal)
+- [ ] Scene setup with zones and spawn points
 
 ---
 
@@ -148,6 +153,22 @@
 - Updated CLAUDE.md with comprehensive project documentation
 - **All bugs fixed and verified working**
 
+### Session 5 (2026-01-15) - PHASE 3 START
+- **Created Map System**:
+  - MapZone.cs - Zone definition with boundaries (BoxCollider), spawn points arrays, patrol waypoints
+  - MapManager.cs - Singleton managing all zones, distance-based spawn validation
+- **Created Spawn System**:
+  - SpawnManager.cs - Random alien assignment (Fisher-Yates), defense zone spawning with min distance rules (20m from astronaut)
+- **Created Interactables**:
+  - Interactable.cs - Base class with proximity detection, cooldowns, role filtering (alien/astronaut)
+  - CoffeeMachine.cs - Alien-only, +40 hunger, 10s cooldown, visual feedback
+  - AlarmTerminal.cs - Alien-only, +10 stress to astronaut in range, panics NPCs, 30s cooldown
+- **Updated Existing Systems**:
+  - GameBootstrap.cs - Auto-creates MapManager and SpawnManager
+  - GameManager.cs - Integrates SpawnManager.SpawnAllEntities() in StartGame()
+  - NPCBehavior.cs - Added zone assignment and zone-based patrol
+- **Phase 3 CODE COMPLETE** - ready for Unity scene setup
+
 ---
 
 ## Known Issues
@@ -163,30 +184,38 @@ Assets/Scripts/
 │   ├── PlayerMovement.cs    ✅ + Footsteps
 │   ├── PlayerShooting.cs    ✅ + Muzzle flash, hit markers, sounds
 │   ├── StressSystem.cs      ✅ Complete
-│   └── AstronautHealth.cs   ✅ NEW - Health + damage
+│   └── AstronautHealth.cs   ✅ Health + damage
 ├── Alien/
 │   ├── AlienController.cs   ✅ Complete
-│   ├── HungerSystem.cs      ✅ Rewritten - Hunger=0 reveals alien
+│   ├── HungerSystem.cs      ✅ Hunger=0 reveals alien
 │   ├── AlienAbilities.cs    ✅ 4 chaos powers (1,2,3,4)
 │   ├── AlienTransformation.cs ✅ Transform + wall-hack + attack
-│   ├── AlienHealth.cs       ✅ NEW - Alien HP system
+│   ├── AlienHealth.cs       ✅ Alien HP system
 │   └── AlienEatSystem.cs    ⚠️ Exists (not reviewed)
 ├── NPC/
-│   ├── NPCBehavior.cs       ✅ Complete
+│   ├── NPCBehavior.cs       ✅ + Zone assignment
 │   └── NPCInteraction.cs    ⚠️ Exists (not reviewed)
+├── Map/
+│   └── MapZone.cs           ✅ NEW - Zone boundaries, spawn points
+├── Interactables/
+│   ├── Interactable.cs      ✅ NEW - Base class for interactables
+│   ├── CoffeeMachine.cs     ✅ NEW - Alien hunger restore
+│   └── AlarmTerminal.cs     ✅ NEW - Stress astronaut
 ├── Core/
-│   ├── GameManager.cs       ✅ + Game Over integration
+│   ├── GameManager.cs       ✅ + SpawnManager integration
 │   ├── GameController.cs    ✅ TAB switch
-│   ├── GameBootstrap.cs     ✅ Auto-init all systems (updated)
+│   ├── GameBootstrap.cs     ✅ + MapManager, SpawnManager
+│   ├── MapManager.cs        ✅ NEW - Zone management
+│   ├── SpawnManager.cs      ✅ NEW - Spawning with rules
 │   ├── AudioManager.cs      ✅ Central audio with pooling
 │   ├── CameraShake.cs       ✅ Shoot/impact/stress shake
 │   ├── PostProcessController.cs ✅ Dynamic URP effects
-│   ├── ChaosLightingController.cs ✅ NEW - Blackout + emergency lights
-│   ├── DefenseZone.cs       ✅ NEW - Weapon upgrade zones
+│   ├── ChaosLightingController.cs ✅ Blackout + emergency lights
+│   ├── DefenseZone.cs       ✅ Weapon upgrade zones
 │   └── NetworkManager.cs    📋 Phase 4
 ├── UI/
 │   ├── GameUIManager.cs     ✅ HUD bars
-│   ├── MenuManager.cs       ✅ NEW - All menus (Main, Pause, Settings, GameOver)
+│   ├── MenuManager.cs       ✅ All menus (Main, Pause, Settings, GameOver)
 │   ├── SimpleCrosshair.cs   ✅ Basic crosshair
 │   └── EatPromptUI.cs       ⚠️ Exists (not reviewed)
 └── Utils/
