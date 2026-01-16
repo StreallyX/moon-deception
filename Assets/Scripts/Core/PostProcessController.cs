@@ -38,6 +38,7 @@ public class PostProcessController : MonoBehaviour
     private float damageTimer = 0f;
     private bool isChaosMode = false;
     private float baseVignetteIntensity = 0.2f;
+    private bool hasSubscribedToStress = false;
 
     void Awake()
     {
@@ -53,14 +54,23 @@ public class PostProcessController : MonoBehaviour
     {
         SetupPostProcessing();
 
-        // Subscribe to stress system
+        // Try to subscribe to stress system (may not exist yet in multiplayer)
+        TrySubscribeToStressSystem();
+
+        Debug.Log("[PostProcessController] Initialized");
+    }
+
+    void TrySubscribeToStressSystem()
+    {
+        if (hasSubscribedToStress) return;
+
         if (StressSystem.Instance != null)
         {
             StressSystem.Instance.OnStressChanged.AddListener(OnStressChanged);
             StressSystem.Instance.OnStressMaxed.AddListener(OnChaosMode);
+            hasSubscribedToStress = true;
+            Debug.Log("[PostProcessController] Subscribed to StressSystem events");
         }
-
-        Debug.Log("[PostProcessController] Initialized");
     }
 
     void SetupPostProcessing()
@@ -167,6 +177,12 @@ public class PostProcessController : MonoBehaviour
 
     void Update()
     {
+        // Try to subscribe if we haven't yet (late subscription for multiplayer)
+        if (!hasSubscribedToStress)
+        {
+            TrySubscribeToStressSystem();
+        }
+
         // Handle damage effect fade
         if (damageTimer > 0)
         {
@@ -188,31 +204,90 @@ public class PostProcessController : MonoBehaviour
 
         float stressPercent = StressSystem.Instance.StressPercent;
 
-        // Increase vignette with stress
+        // ========== VIGNETTE - Tunnel vision effect ==========
+        // Starts at 50% stress, gets darker as stress increases
         if (vignette != null)
         {
-            float targetVignette = baseVignetteIntensity + (stressPercent * maxStressVignette);
-            vignette.intensity.Override(Mathf.Lerp(vignette.intensity.value, targetVignette, Time.deltaTime * 3f));
+            float vignetteIntensity = baseVignetteIntensity;
+
+            if (stressPercent >= 0.5f)
+            {
+                // From 50% to 100%: vignette goes from base to very dark (0.6)
+                float t = (stressPercent - 0.5f) / 0.5f;
+                vignetteIntensity = Mathf.Lerp(baseVignetteIntensity, 0.6f, t);
+
+                // Add red tint to vignette at high stress
+                if (stressPercent >= 0.7f)
+                {
+                    float redT = (stressPercent - 0.7f) / 0.3f;
+                    vignette.color.Override(Color.Lerp(Color.black, new Color(0.3f, 0f, 0f), redT));
+                }
+            }
+
+            vignette.intensity.Override(Mathf.Lerp(vignette.intensity.value, vignetteIntensity, Time.deltaTime * 3f));
         }
 
-        // Add chromatic aberration at high stress
+        // ========== CHROMATIC ABERRATION - Vision distortion ==========
+        // Starts at 50% stress
         if (chromaticAberration != null)
         {
-            float targetChroma = stressPercent > 0.5f ? (stressPercent - 0.5f) * 2f * maxStressChromaticAberration : 0f;
+            float targetChroma = 0f;
+            if (stressPercent >= 0.5f)
+            {
+                // From 50% to 100%: chromatic aberration increases
+                float t = (stressPercent - 0.5f) / 0.5f;
+                targetChroma = Mathf.Lerp(0f, maxStressChromaticAberration, t);
+            }
             chromaticAberration.intensity.Override(Mathf.Lerp(chromaticAberration.intensity.value, targetChroma, Time.deltaTime * 3f));
         }
 
-        // Desaturate and add red tint at high stress
-        if (colorAdjustments != null && stressPercent > 0.7f)
+        // ========== COLOR ADJUSTMENTS - Desaturation and exposure ==========
+        if (colorAdjustments != null)
         {
-            float intensity = (stressPercent - 0.7f) / 0.3f;
-            colorAdjustments.saturation.Override(Mathf.Lerp(0f, -30f, intensity));
+            // Desaturate starting at 50%
+            if (stressPercent >= 0.5f)
+            {
+                float t = (stressPercent - 0.5f) / 0.5f;
+                colorAdjustments.saturation.Override(Mathf.Lerp(0f, -40f, t));
+
+                // Darken screen at very high stress (80%+)
+                if (stressPercent >= 0.8f)
+                {
+                    float darkT = (stressPercent - 0.8f) / 0.2f;
+                    colorAdjustments.postExposure.Override(Mathf.Lerp(0f, -0.5f, darkT));
+                }
+                else
+                {
+                    colorAdjustments.postExposure.Override(0f);
+                }
+            }
+            else
+            {
+                colorAdjustments.saturation.Override(0f);
+                colorAdjustments.postExposure.Override(0f);
+            }
         }
 
-        // Increase film grain with stress
+        // ========== FILM GRAIN - Increasing noise ==========
         if (filmGrain != null)
         {
-            filmGrain.intensity.Override(0.15f + (stressPercent * 0.2f));
+            // Film grain increases with stress
+            float grainIntensity = 0.15f;
+            if (stressPercent >= 0.5f)
+            {
+                float t = (stressPercent - 0.5f) / 0.5f;
+                grainIntensity = Mathf.Lerp(0.15f, 0.5f, t);
+            }
+            filmGrain.intensity.Override(grainIntensity);
+        }
+
+        // ========== BLOOM - Pulsing effect at high stress ==========
+        if (bloom != null && stressPercent >= 0.7f)
+        {
+            // Pulsing bloom at high stress
+            float t = (stressPercent - 0.7f) / 0.3f;
+            float pulse = 1f + Mathf.Sin(Time.time * 3f) * 0.2f * t;
+            bloom.intensity.Override(0.5f * pulse);
         }
     }
 
@@ -277,7 +352,7 @@ public class PostProcessController : MonoBehaviour
 
     void OnDestroy()
     {
-        if (StressSystem.Instance != null)
+        if (hasSubscribedToStress && StressSystem.Instance != null)
         {
             StressSystem.Instance.OnStressChanged.RemoveListener(OnStressChanged);
             StressSystem.Instance.OnStressMaxed.RemoveListener(OnChaosMode);

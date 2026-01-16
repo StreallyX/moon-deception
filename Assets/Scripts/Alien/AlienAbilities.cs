@@ -56,6 +56,17 @@ public class AlienAbilities : MonoBehaviour
     {
         alienController = GetComponent<AlienController>();
         Debug.Log("[AlienAbilities] Initialized - Press 1,2,3,4 to use chaos powers");
+        Debug.Log($"[AlienAbilities] AlienController found: {alienController != null}");
+    }
+
+    void OnEnable()
+    {
+        Debug.Log("[AlienAbilities] ENABLED - Abilities now active!");
+    }
+
+    void OnDisable()
+    {
+        Debug.Log("[AlienAbilities] DISABLED");
     }
 
     void Update()
@@ -91,15 +102,56 @@ public class AlienAbilities : MonoBehaviour
     bool CanUseAbilities()
     {
         // Only usable if alien is being controlled and game is in Playing phase
-        if (!AlienController.IsAlienControlled) return false;
-
-        if (GameManager.Instance != null)
+        if (!AlienController.IsAlienControlled)
         {
-            // Can't use abilities during Chaos phase - you're hunting now!
-            if (GameManager.Instance.CurrentPhase == GameManager.GamePhase.Chaos)
-                return false;
-            if (GameManager.Instance.CurrentPhase != GameManager.GamePhase.Playing)
-                return false;
+            // Debug log every 2 seconds
+            if (Time.frameCount % 120 == 0)
+            {
+                Debug.Log($"[AlienAbilities] CanUseAbilities FALSE - IsAlienControlled=false, ActiveAlien={(AlienController.ActiveAlien != null ? "EXISTS" : "NULL")}, enabled={alienController?.enabled}");
+            }
+            return false;
+        }
+
+        // Check game phase from GameManager OR NetworkGameManager
+        bool isPlaying = false;
+        bool isChaos = false;
+
+        // Check NetworkGameManager first (for multiplayer)
+        if (NetworkGameManager.Instance != null)
+        {
+            var phase = NetworkGameManager.Instance.GetCurrentPhase();
+            isPlaying = (phase == NetworkGameManager.GamePhase.Playing);
+            isChaos = (phase == NetworkGameManager.GamePhase.Chaos);
+        }
+        // Fallback to GameManager (for single player or if NetworkGameManager not present)
+        else if (GameManager.Instance != null)
+        {
+            isPlaying = (GameManager.Instance.CurrentPhase == GameManager.GamePhase.Playing);
+            isChaos = (GameManager.Instance.CurrentPhase == GameManager.GamePhase.Chaos);
+        }
+        else
+        {
+            // No manager found - allow abilities (testing mode)
+            return true;
+        }
+
+        // Debug log every 2 seconds
+        if (Time.frameCount % 120 == 0)
+        {
+            Debug.Log($"[AlienAbilities] Phase check - isPlaying={isPlaying}, isChaos={isChaos}");
+        }
+
+        // Can't use abilities during Chaos phase - you're hunting now!
+        if (isChaos) return false;
+
+        // Must be in Playing phase
+        if (!isPlaying)
+        {
+            if (Time.frameCount % 120 == 0)
+            {
+                Debug.Log("[AlienAbilities] CanUseAbilities FALSE - Not in Playing phase");
+            }
+            return false;
         }
 
         return true;
@@ -133,14 +185,20 @@ public class AlienAbilities : MonoBehaviour
         // Apply stress to astronaut if nearby
         ApplyStressToAstronaut(collisionRange * 2f, collisionStress);
 
-        // Play sound effect
-        if (AudioManager.Instance != null)
+        // Play sound effect (networked - everyone hears it)
+        if (NetworkAudioManager.Instance != null)
+        {
+            NetworkAudioManager.Instance.PlayBulletImpact("Metal", transform.position);
+        }
+        else if (AudioManager.Instance != null)
         {
             AudioManager.Instance.PlaySFX3D(AudioManager.Instance.bulletImpactMetal, transform.position);
         }
 
         // Visual feedback
         StartCoroutine(CollisionVisualEffect());
+
+        Debug.Log($"[AlienAbilities] Collision affected {affectedCount} NPCs");
     }
 
     IEnumerator CollisionVisualEffect()
@@ -230,13 +288,17 @@ public class AlienAbilities : MonoBehaviour
         // Apply stress
         ApplyStressToAstronaut(soundRange, soundStress);
 
-        // Play creepy sound
-        if (AudioManager.Instance != null)
+        // Play creepy sound (networked - everyone hears it)
+        if (NetworkAudioManager.Instance != null)
         {
-            AudioManager.Instance.PlaySFX3D(AudioManager.Instance.npcDeath, soundPos, 1.5f);
+            NetworkAudioManager.Instance.PlayAlienGrowl(soundPos);
+        }
+        else if (AudioManager.Instance != null)
+        {
+            AudioManager.Instance.PlayAlienGrowl(soundPos);
         }
 
-        // Make nearby NPCs look around nervously
+        // Make nearby NPCs look around nervously and some panic
         Collider[] hits = Physics.OverlapSphere(soundPos, 8f);
         foreach (var hit in hits)
         {
@@ -245,8 +307,16 @@ public class AlienAbilities : MonoBehaviour
             {
                 // NPC heard something - look towards sound
                 npc.transform.LookAt(new Vector3(soundPos.x, npc.transform.position.y, soundPos.z));
+
+                // 30% chance to panic
+                if (Random.value < 0.3f)
+                {
+                    npc.Panic();
+                }
             }
         }
+
+        Debug.Log($"[AlienAbilities] Sound ability used at {soundPos}");
     }
 
     // ==================== ABILITY 4: WIND ====================
@@ -258,8 +328,19 @@ public class AlienAbilities : MonoBehaviour
         // Apply stress (highest value)
         ApplyStressToAstronaut(windRange, windStress);
 
-        // Affect all NPCs in range - make them stumble
+        // Play power down sound (networked - everyone hears it)
+        if (NetworkAudioManager.Instance != null)
+        {
+            NetworkAudioManager.Instance.PlayPowerDown();
+        }
+        else if (AudioManager.Instance != null)
+        {
+            AudioManager.Instance.PlayPowerDown();
+        }
+
+        // Affect all NPCs in range - make them stumble and panic
         Collider[] hits = Physics.OverlapSphere(transform.position, windRange);
+        int affectedCount = 0;
         foreach (var hit in hits)
         {
             NPCBehavior npc = hit.GetComponent<NPCBehavior>();
@@ -268,6 +349,13 @@ public class AlienAbilities : MonoBehaviour
                 // Random push direction
                 Vector3 pushDir = new Vector3(Random.Range(-1f, 1f), 0, Random.Range(-1f, 1f)).normalized;
                 npc.transform.position += pushDir * 0.3f;
+
+                // 50% chance to panic
+                if (Random.value < 0.5f)
+                {
+                    npc.Panic();
+                }
+                affectedCount++;
             }
         }
 
@@ -276,6 +364,8 @@ public class AlienAbilities : MonoBehaviour
 
         // Flicker lights briefly
         StartCoroutine(FlickerLights());
+
+        Debug.Log($"[AlienAbilities] Wind affected {affectedCount} NPCs");
     }
 
     IEnumerator WindVisualEffect()
@@ -393,19 +483,93 @@ public class AlienAbilities : MonoBehaviour
     // ==================== UI HELPER ====================
     void OnGUI()
     {
-        if (!AlienController.IsAlienControlled) return;
+        // CRITICAL: Check if this component is enabled (means we're the local alien player)
+        if (!enabled) return;
 
-        // Show ability cooldowns
-        GUIStyle style = new GUIStyle(GUI.skin.label);
-        style.fontSize = 16;
-        style.normal.textColor = Color.white;
+        // If AlienController.IsAlienControlled is false but we're enabled, show debug info
+        if (!AlienController.IsAlienControlled)
+        {
+            // Debug: Show why abilities might not work
+            GUIStyle debugStyle = new GUIStyle(GUI.skin.label);
+            debugStyle.fontSize = 12;
+            debugStyle.normal.textColor = Color.yellow;
+            GUI.Label(new Rect(10, Screen.height - 180, 300, 60),
+                $"[DEBUG] AlienAbilities enabled but:\n" +
+                $"ActiveAlien={(AlienController.ActiveAlien != null ? AlienController.ActiveAlien.gameObject.name : "NULL")}\n" +
+                $"AlienController.enabled={(alienController != null ? alienController.enabled.ToString() : "null")}",
+                debugStyle);
 
-        float y = Screen.height - 120;
-        float x = 20;
+            // Still show abilities UI even if IsAlienControlled is false
+            // This helps debug the issue
+        }
 
-        GUI.Label(new Rect(x, y, 200, 25), $"[1] Collision: {(CanUseAbility1 ? "READY" : collisionTimer.ToString("F1") + "s")}", style);
-        GUI.Label(new Rect(x, y + 25, 200, 25), $"[2] Glitch: {(CanUseAbility2 ? "READY" : glitchTimer.ToString("F1") + "s")}", style);
-        GUI.Label(new Rect(x, y + 50, 200, 25), $"[3] Sound: {(CanUseAbility3 ? "READY" : soundTimer.ToString("F1") + "s")}", style);
-        GUI.Label(new Rect(x, y + 75, 200, 25), $"[4] Wind: {(CanUseAbility4 ? "READY" : windTimer.ToString("F1") + "s")}", style);
+        // Check if in chaos mode (don't show abilities UI during chaos)
+        bool isChaos = false;
+        if (NetworkGameManager.Instance != null)
+        {
+            isChaos = (NetworkGameManager.Instance.GetCurrentPhase() == NetworkGameManager.GamePhase.Chaos);
+        }
+        else if (GameManager.Instance != null)
+        {
+            isChaos = (GameManager.Instance.CurrentPhase == GameManager.GamePhase.Chaos);
+        }
+
+        if (isChaos) return;
+
+        // Background box for better visibility
+        float boxWidth = 220;
+        float boxHeight = 130;
+        float x = 15;
+        float y = Screen.height - boxHeight - 15;
+
+        // Semi-transparent background
+        GUI.Box(new Rect(x - 5, y - 5, boxWidth, boxHeight), "");
+
+        // Title
+        GUIStyle titleStyle = new GUIStyle(GUI.skin.label);
+        titleStyle.fontSize = 18;
+        titleStyle.fontStyle = FontStyle.Bold;
+        titleStyle.normal.textColor = new Color(1f, 0.5f, 0f); // Orange
+        GUI.Label(new Rect(x, y, boxWidth, 25), "POUVOIRS CHAOS", titleStyle);
+
+        // Ability styles
+        GUIStyle readyStyle = new GUIStyle(GUI.skin.label);
+        readyStyle.fontSize = 16;
+        readyStyle.fontStyle = FontStyle.Bold;
+        readyStyle.normal.textColor = Color.green;
+
+        GUIStyle cooldownStyle = new GUIStyle(GUI.skin.label);
+        cooldownStyle.fontSize = 16;
+        cooldownStyle.normal.textColor = Color.gray;
+
+        float lineY = y + 28;
+        float lineHeight = 22;
+
+        // Ability 1 - Collision
+        DrawAbilityLine(x, lineY, "[1] Collision", CanUseAbility1, collisionTimer, readyStyle, cooldownStyle);
+        lineY += lineHeight;
+
+        // Ability 2 - Glitch
+        DrawAbilityLine(x, lineY, "[2] Glitch", CanUseAbility2, glitchTimer, readyStyle, cooldownStyle);
+        lineY += lineHeight;
+
+        // Ability 3 - Sound
+        DrawAbilityLine(x, lineY, "[3] Son", CanUseAbility3, soundTimer, readyStyle, cooldownStyle);
+        lineY += lineHeight;
+
+        // Ability 4 - Wind
+        DrawAbilityLine(x, lineY, "[4] Vent", CanUseAbility4, windTimer, readyStyle, cooldownStyle);
+    }
+
+    void DrawAbilityLine(float x, float y, string name, bool ready, float timer, GUIStyle readyStyle, GUIStyle cooldownStyle)
+    {
+        if (ready)
+        {
+            GUI.Label(new Rect(x, y, 200, 22), $"{name}: PRÊT", readyStyle);
+        }
+        else
+        {
+            GUI.Label(new Rect(x, y, 200, 22), $"{name}: {timer:F1}s", cooldownStyle);
+        }
     }
 }

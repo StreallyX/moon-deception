@@ -78,6 +78,7 @@ public class NPCBehavior : NetworkBehaviour, IDamageable
     private CharacterController characterController;
 
     public NPCState CurrentState => currentState;
+    public bool IsDead => currentState == NPCState.Dead;
     public bool IsAlien => isAlien;
     public string Name => npcName;
     public MapZone AssignedZone => assignedZone;

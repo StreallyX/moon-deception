@@ -170,6 +170,27 @@ public class NetworkAudioManager : MonoBehaviour
         }
     }
 
+    // ==================== ENVIRONMENT SOUNDS ====================
+
+    public void PlayAlarm()
+    {
+        if (!ShouldSync())
+        {
+            AudioManager.Instance?.PlayAlarm();
+            return;
+        }
+
+        var player = FindAnyNetworkedPlayer();
+        if (player != null)
+        {
+            player.PlayAlarmServerRpc();
+        }
+        else
+        {
+            AudioManager.Instance?.PlayAlarm();
+        }
+    }
+
     // ==================== ALIEN SOUNDS ====================
 
     public void PlayAlienReveal()

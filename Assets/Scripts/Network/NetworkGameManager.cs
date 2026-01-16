@@ -282,6 +282,13 @@ public class NetworkGameManager : MonoBehaviour
         // Start playing
         SetPhase(GamePhase.Playing);
 
+        // IMPORTANT: Also start GameManager so all systems know we're playing!
+        if (GameManager.Instance != null)
+        {
+            GameManager.Instance.StartGame();
+            Debug.Log("[NetworkGame] Called GameManager.StartGame() to sync phases");
+        }
+
         Debug.Log($"[NetworkGame] Game started! Astronaut: Client {astronautId}");
     }
 
@@ -514,5 +521,30 @@ public class NetworkGameManager : MonoBehaviour
         {
             GameManager.Instance.TriggerChaosPhase();
         }
+    }
+
+    /// <summary>
+    /// Called by NetworkedPlayer RPC to set local phase to Chaos on clients.
+    /// This is used because NetworkGameManager is not a NetworkBehaviour.
+    /// </summary>
+    public void SetLocalChaosPhase()
+    {
+        if (currentPhase == GamePhase.Chaos) return;
+
+        Debug.Log("[NetworkGame] SetLocalChaosPhase called (client sync)");
+        currentPhase = GamePhase.Chaos;
+        OnPhaseChanged?.Invoke(GamePhase.Chaos);
+    }
+
+    /// <summary>
+    /// Called by NetworkedPlayer RPC to set local phase to Playing on clients.
+    /// </summary>
+    public void SetLocalPlayingPhase()
+    {
+        if (currentPhase == GamePhase.Playing) return;
+
+        Debug.Log("[NetworkGame] SetLocalPlayingPhase called (client sync)");
+        currentPhase = GamePhase.Playing;
+        OnPhaseChanged?.Invoke(GamePhase.Playing);
     }
 }

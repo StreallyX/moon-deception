@@ -305,13 +305,52 @@ public class AlienEatSystem : MonoBehaviour
         blood.name = "BloodDecal";
         blood.transform.position = position + Vector3.down * 0.9f;
         blood.transform.localScale = new Vector3(1f, 0.1f, 1f);
-        
+
         Renderer renderer = blood.GetComponent<Renderer>();
         renderer.material.color = new Color(0.5f, 0f, 0f, 1f);
-        
+
         Collider col = blood.GetComponent<Collider>();
         if (col != null) Destroy(col);
-        
+
         Destroy(blood, 30f);
+    }
+
+    // ==================== UI FALLBACK ====================
+    void OnGUI()
+    {
+        // Only show when alien is controlled and has a valid target
+        if (!AlienController.IsAlienControlled) return;
+        if (currentTarget == null) return;
+
+        // Create styles for the eat prompt
+        GUIStyle promptStyle = new GUIStyle(GUI.skin.label);
+        promptStyle.fontSize = 28;
+        promptStyle.fontStyle = FontStyle.Bold;
+        promptStyle.alignment = TextAnchor.MiddleCenter;
+        promptStyle.normal.textColor = Color.red;
+
+        GUIStyle shadowStyle = new GUIStyle(promptStyle);
+        shadowStyle.normal.textColor = Color.black;
+
+        // Position at center-bottom of screen
+        float width = 350;
+        float height = 40;
+        float x = (Screen.width - width) / 2;
+        float y = Screen.height * 0.65f;
+
+        // Draw shadow
+        GUI.Label(new Rect(x + 2, y + 2, width, height), "Appuie sur E pour MANGER", shadowStyle);
+
+        // Draw text with pulsing effect
+        float pulse = 0.7f + Mathf.PingPong(Time.time * 2f, 0.3f);
+        promptStyle.normal.textColor = new Color(1f, 0f, 0f, pulse);
+        GUI.Label(new Rect(x, y, width, height), "Appuie sur E pour MANGER", promptStyle);
+
+        // Also show target name
+        GUIStyle nameStyle = new GUIStyle(GUI.skin.label);
+        nameStyle.fontSize = 18;
+        nameStyle.alignment = TextAnchor.MiddleCenter;
+        nameStyle.normal.textColor = new Color(1f, 0.5f, 0.5f);
+        GUI.Label(new Rect(x, y + 35, width, 25), $"Cible: {currentTarget.name}", nameStyle);
     }
 }

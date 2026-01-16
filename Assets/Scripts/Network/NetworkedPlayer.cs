@@ -198,6 +198,19 @@ public class NetworkedPlayer : NetworkBehaviour
             {
                 GameUIManager.Instance.SetPlayerType(PlayerType.Astronaut);
             }
+
+            // CRITICAL: Ensure GameManager is in Playing phase for the astronaut player
+            if (GameManager.Instance != null && GameManager.Instance.CurrentPhase != GameManager.GamePhase.Playing)
+            {
+                GameManager.Instance.StartGame();
+                Debug.Log("[NetworkedPlayer] Called GameManager.StartGame() for astronaut");
+            }
+
+            // Also sync NetworkGameManager phase
+            if (NetworkGameManager.Instance != null)
+            {
+                NetworkGameManager.Instance.SetLocalPlayingPhase();
+            }
         }
         else
         {
@@ -237,6 +250,19 @@ public class NetworkedPlayer : NetworkBehaviour
             if (GameUIManager.Instance != null)
             {
                 GameUIManager.Instance.SetPlayerType(PlayerType.Alien);
+            }
+
+            // CRITICAL: Ensure GameManager is in Playing phase for the alien player
+            if (GameManager.Instance != null && GameManager.Instance.CurrentPhase != GameManager.GamePhase.Playing)
+            {
+                GameManager.Instance.StartGame();
+                Debug.Log("[NetworkedPlayer] Called GameManager.StartGame() for alien");
+            }
+
+            // Also sync NetworkGameManager phase
+            if (NetworkGameManager.Instance != null)
+            {
+                NetworkGameManager.Instance.SetLocalPlayingPhase();
             }
 
             // For alien, AlienController handles camera - skip the camera section below
@@ -536,6 +562,18 @@ public class NetworkedPlayer : NetworkBehaviour
         AudioManager.Instance?.PlayLightsEmergency();
     }
 
+    [ServerRpc(RequireOwnership = false)]
+    public void PlayAlarmServerRpc()
+    {
+        PlayAlarmClientRpc();
+    }
+
+    [ClientRpc]
+    private void PlayAlarmClientRpc()
+    {
+        AudioManager.Instance?.PlayAlarm();
+    }
+
     // Victory/Defeat are server-only broadcasts
     public void BroadcastVictory()
     {
@@ -684,15 +722,39 @@ public class NetworkedPlayer : NetworkBehaviour
     [ServerRpc(RequireOwnership = false)]
     public void TriggerChaosPhaseServerRpc()
     {
+        // Also trigger on NetworkGameManager (server-side)
+        if (NetworkGameManager.Instance != null)
+        {
+            NetworkGameManager.Instance.TriggerChaosPhase();
+        }
         TriggerChaosPhaseClientRpc();
     }
 
     [ClientRpc]
     private void TriggerChaosPhaseClientRpc()
     {
+        Debug.Log("[NetworkedPlayer] TriggerChaosPhaseClientRpc received!");
+
+        // Update NetworkGameManager phase locally (even though it's not a NetworkBehaviour)
+        // This ensures all systems that check NetworkGameManager phase see Chaos
+        if (NetworkGameManager.Instance != null)
+        {
+            // Directly update the local phase via a public method
+            NetworkGameManager.Instance.SetLocalChaosPhase();
+        }
+
+        // Trigger GameManager chaos phase with all effects
         if (GameManager.Instance != null && GameManager.Instance.CurrentPhase != GameManager.GamePhase.Chaos)
         {
             GameManager.Instance.TriggerChaosPhase();
+            Debug.Log("[NetworkedPlayer] Called GameManager.TriggerChaosPhase()");
+        }
+
+        // Also trigger chaos lighting directly in case GameManager didn't
+        if (ChaosLightingController.Instance != null)
+        {
+            ChaosLightingController.Instance.StartChaosLighting();
+            Debug.Log("[NetworkedPlayer] Called ChaosLightingController.StartChaosLighting()");
         }
     }
 

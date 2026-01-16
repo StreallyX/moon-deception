@@ -63,44 +63,116 @@ public class AlienTransformation : MonoBehaviour
             }
         }
 
-        // Subscribe to chaos phase
+        // Subscribe to chaos phase (both GameManager AND NetworkGameManager for multiplayer)
+        SubscribeToEvents();
+
+        // Find astronaut
+        FindAstronaut();
+
+        Debug.Log("[AlienTransformation] Initialized");
+    }
+
+    void SubscribeToEvents()
+    {
+        bool subscribed = false;
+
+        // Subscribe to GameManager
         if (GameManager.Instance != null)
         {
             GameManager.Instance.OnChaosPhase.AddListener(OnChaosPhaseStarted);
             GameManager.Instance.OnGameEnd.AddListener(OnGameEnded);
             Debug.Log("[AlienTransformation] Subscribed to GameManager events");
-        }
-        else
-        {
-            Debug.LogWarning("[AlienTransformation] GameManager.Instance is null, will retry...");
-            StartCoroutine(LateSubscribe());
+            subscribed = true;
         }
 
-        // Find astronaut
+        // Also subscribe to NetworkGameManager for multiplayer
+        if (NetworkGameManager.Instance != null)
+        {
+            NetworkGameManager.Instance.OnPhaseChanged += OnNetworkPhaseChanged;
+            Debug.Log("[AlienTransformation] Subscribed to NetworkGameManager events");
+            subscribed = true;
+        }
+
+        if (!subscribed)
+        {
+            StartCoroutine(LateSubscribe());
+        }
+    }
+
+    void OnNetworkPhaseChanged(NetworkGameManager.GamePhase phase)
+    {
+        if (phase == NetworkGameManager.GamePhase.Chaos && !isTransformed)
+        {
+            Debug.Log("[AlienTransformation] Received NetworkGameManager Chaos phase!");
+            OnChaosPhaseStarted();
+        }
+    }
+
+    void FindAstronaut()
+    {
+        // Find astronaut - try multiple methods
         var stressSystem = FindObjectOfType<StressSystem>();
         if (stressSystem != null)
         {
             astronautTransform = stressSystem.transform;
+            return;
         }
 
-        Debug.Log("[AlienTransformation] Initialized");
+        var playerMovement = FindObjectOfType<PlayerMovement>();
+        if (playerMovement != null)
+        {
+            astronautTransform = playerMovement.transform;
+            return;
+        }
+
+        // In multiplayer, look for NetworkedPlayer that is astronaut
+        var networkedPlayers = FindObjectsOfType<NetworkedPlayer>();
+        foreach (var np in networkedPlayers)
+        {
+            if (np.isAstronaut)
+            {
+                astronautTransform = np.transform;
+                return;
+            }
+        }
     }
 
     System.Collections.IEnumerator LateSubscribe()
     {
-        // Wait for GameManager to be ready
-        yield return null;
-        yield return null;
+        float timeout = 5f;
+        float elapsed = 0f;
 
-        if (GameManager.Instance != null)
+        while (elapsed < timeout)
         {
-            GameManager.Instance.OnChaosPhase.AddListener(OnChaosPhaseStarted);
-            GameManager.Instance.OnGameEnd.AddListener(OnGameEnded);
-            Debug.Log("[AlienTransformation] Late-subscribed to GameManager events");
-        }
-        else
-        {
-            Debug.LogError("[AlienTransformation] Still can't find GameManager!");
+            yield return new WaitForSeconds(0.5f);
+            elapsed += 0.5f;
+
+            if (GameManager.Instance != null)
+            {
+                GameManager.Instance.OnChaosPhase.RemoveListener(OnChaosPhaseStarted);
+                GameManager.Instance.OnGameEnd.RemoveListener(OnGameEnded);
+                GameManager.Instance.OnChaosPhase.AddListener(OnChaosPhaseStarted);
+                GameManager.Instance.OnGameEnd.AddListener(OnGameEnded);
+                Debug.Log("[AlienTransformation] Late-subscribed to GameManager events");
+            }
+
+            if (NetworkGameManager.Instance != null)
+            {
+                NetworkGameManager.Instance.OnPhaseChanged -= OnNetworkPhaseChanged;
+                NetworkGameManager.Instance.OnPhaseChanged += OnNetworkPhaseChanged;
+                Debug.Log("[AlienTransformation] Late-subscribed to NetworkGameManager events");
+            }
+
+            // Also try to find astronaut again
+            if (astronautTransform == null)
+            {
+                FindAstronaut();
+            }
+
+            if (astronautTransform != null)
+            {
+                yield break;
+            }
         }
     }
 
@@ -528,6 +600,11 @@ public class AlienTransformation : MonoBehaviour
         {
             GameManager.Instance.OnChaosPhase.RemoveListener(OnChaosPhaseStarted);
             GameManager.Instance.OnGameEnd.RemoveListener(OnGameEnded);
+        }
+
+        if (NetworkGameManager.Instance != null)
+        {
+            NetworkGameManager.Instance.OnPhaseChanged -= OnNetworkPhaseChanged;
         }
 
         if (astronautOutline != null)

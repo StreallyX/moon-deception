@@ -58,14 +58,75 @@ public class ChaosLightingController : MonoBehaviour
         // Find all lights in scene
         FindAllLights();
 
-        // Subscribe to game events
+        // Subscribe to game events (both GameManager AND NetworkGameManager for multiplayer)
+        SubscribeToEvents();
+
+        Debug.Log($"[ChaosLightingController] Initialized. Found {sceneLights.Count} lights.");
+    }
+
+    void SubscribeToEvents()
+    {
+        bool subscribed = false;
+
+        // Subscribe to GameManager
         if (GameManager.Instance != null)
         {
             GameManager.Instance.OnChaosPhase.AddListener(StartChaosLighting);
             GameManager.Instance.OnGameStart.AddListener(ResetLighting);
+            subscribed = true;
+            Debug.Log("[ChaosLightingController] Subscribed to GameManager events");
         }
 
-        Debug.Log($"[ChaosLightingController] Initialized. Found {sceneLights.Count} lights.");
+        // Also subscribe to NetworkGameManager for multiplayer
+        if (NetworkGameManager.Instance != null)
+        {
+            NetworkGameManager.Instance.OnPhaseChanged += OnNetworkPhaseChanged;
+            subscribed = true;
+            Debug.Log("[ChaosLightingController] Subscribed to NetworkGameManager events");
+        }
+
+        if (!subscribed)
+        {
+            StartCoroutine(LateSubscribeToEvents());
+        }
+    }
+
+    void OnNetworkPhaseChanged(NetworkGameManager.GamePhase phase)
+    {
+        if (phase == NetworkGameManager.GamePhase.Chaos && !isChaosMode)
+        {
+            Debug.Log("[ChaosLightingController] Received NetworkGameManager Chaos phase!");
+            StartChaosLighting();
+        }
+    }
+
+    System.Collections.IEnumerator LateSubscribeToEvents()
+    {
+        float timeout = 5f;
+        float elapsed = 0f;
+
+        while (elapsed < timeout)
+        {
+            yield return new WaitForSeconds(0.5f);
+            elapsed += 0.5f;
+
+            if (GameManager.Instance != null)
+            {
+                GameManager.Instance.OnChaosPhase.RemoveListener(StartChaosLighting);
+                GameManager.Instance.OnGameStart.RemoveListener(ResetLighting);
+                GameManager.Instance.OnChaosPhase.AddListener(StartChaosLighting);
+                GameManager.Instance.OnGameStart.AddListener(ResetLighting);
+                Debug.Log("[ChaosLightingController] Late-subscribed to GameManager");
+            }
+
+            if (NetworkGameManager.Instance != null)
+            {
+                NetworkGameManager.Instance.OnPhaseChanged -= OnNetworkPhaseChanged;
+                NetworkGameManager.Instance.OnPhaseChanged += OnNetworkPhaseChanged;
+                Debug.Log("[ChaosLightingController] Late-subscribed to NetworkGameManager");
+                yield break;
+            }
+        }
     }
 
     void FindAllLights()
@@ -309,6 +370,11 @@ public class ChaosLightingController : MonoBehaviour
         {
             GameManager.Instance.OnChaosPhase.RemoveListener(StartChaosLighting);
             GameManager.Instance.OnGameStart.RemoveListener(ResetLighting);
+        }
+
+        if (NetworkGameManager.Instance != null)
+        {
+            NetworkGameManager.Instance.OnPhaseChanged -= OnNetworkPhaseChanged;
         }
     }
 }

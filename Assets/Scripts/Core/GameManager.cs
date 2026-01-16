@@ -314,9 +314,26 @@ public class GameManager : MonoBehaviour
     /// </summary>
     private void TriggerAlarm()
     {
-        // TODO: Play alarm sound
-        // TODO: Flash warning lights
         Debug.Log("[GameManager] ALARM TRIGGERED!");
+
+        // Play alarm sound (networked)
+        if (NetworkAudioManager.Instance != null)
+        {
+            NetworkAudioManager.Instance.PlayAlarm();
+        }
+        else if (AudioManager.Instance != null)
+        {
+            AudioManager.Instance.PlayAlarm();
+        }
+
+        // Make all NPCs panic!
+        foreach (var npc in activeNPCs)
+        {
+            if (npc != null && !npc.IsDead)
+            {
+                npc.Panic();
+            }
+        }
     }
 
     /// <summary>
@@ -324,8 +341,26 @@ public class GameManager : MonoBehaviour
     /// </summary>
     private void TurnOffLights()
     {
-        // TODO: Disable main lights, enable emergency lighting
         Debug.Log("[GameManager] Lights out!");
+
+        // Use ChaosLightingController if available
+        if (ChaosLightingController.Instance != null)
+        {
+            ChaosLightingController.Instance.StartChaosLighting();
+        }
+        else
+        {
+            // Fallback - manually turn off lights
+            Light[] lights = FindObjectsOfType<Light>();
+            foreach (var light in lights)
+            {
+                if (light.type != LightType.Directional) // Keep directional for minimal visibility
+                {
+                    light.intensity *= 0.1f;
+                }
+            }
+            Debug.Log($"[GameManager] Dimmed {lights.Length} lights");
+        }
     }
 
     /// <summary>

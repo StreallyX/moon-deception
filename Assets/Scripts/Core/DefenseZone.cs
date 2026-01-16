@@ -1,4 +1,5 @@
 using UnityEngine;
+using Unity.Netcode;
 
 /// <summary>
 /// Defense zone where astronaut can get a better weapon during Chaos phase.
@@ -48,38 +49,84 @@ public class DefenseZone : MonoBehaviour
         // Create visual indicator if none exists
         SetupVisuals();
 
-        // Subscribe to chaos phase
+        // Subscribe to chaos phase (both GameManager and NetworkGameManager)
+        SubscribeToChaosPhase();
+
+        Debug.Log($"[DefenseZone] {zoneName} initialized");
+    }
+
+    void SubscribeToChaosPhase()
+    {
+        bool subscribed = false;
+
+        // Subscribe to GameManager
         if (GameManager.Instance != null)
         {
             GameManager.Instance.OnChaosPhase.AddListener(ActivateZone);
             GameManager.Instance.OnGameStart.AddListener(ResetZone);
             Debug.Log($"[DefenseZone] {zoneName} subscribed to GameManager events");
-        }
-        else
-        {
-            Debug.LogWarning($"[DefenseZone] {zoneName} - GameManager.Instance is null! Will try again...");
-            StartCoroutine(LateSubscribe());
+            subscribed = true;
         }
 
-        Debug.Log($"[DefenseZone] {zoneName} initialized");
+        // Also subscribe to NetworkGameManager phase changes
+        if (NetworkGameManager.Instance != null)
+        {
+            NetworkGameManager.Instance.OnPhaseChanged += OnNetworkPhaseChanged;
+            Debug.Log($"[DefenseZone] {zoneName} subscribed to NetworkGameManager events");
+            subscribed = true;
+        }
+
+        if (!subscribed)
+        {
+            Debug.LogWarning($"[DefenseZone] {zoneName} - No manager found! Will try again...");
+            StartCoroutine(LateSubscribe());
+        }
+    }
+
+    void OnNetworkPhaseChanged(NetworkGameManager.GamePhase phase)
+    {
+        if (phase == NetworkGameManager.GamePhase.Chaos)
+        {
+            Debug.Log($"[DefenseZone] {zoneName} received NetworkGameManager Chaos phase!");
+            ActivateZone();
+        }
     }
 
     System.Collections.IEnumerator LateSubscribe()
     {
-        // Wait a frame for GameManager to initialize
-        yield return null;
-        yield return null;
+        // Wait for managers to initialize
+        float timeout = 5f;
+        float elapsed = 0f;
 
-        if (GameManager.Instance != null)
+        while (elapsed < timeout)
         {
-            GameManager.Instance.OnChaosPhase.AddListener(ActivateZone);
-            GameManager.Instance.OnGameStart.AddListener(ResetZone);
-            Debug.Log($"[DefenseZone] {zoneName} late-subscribed to GameManager events");
+            yield return new WaitForSeconds(0.5f);
+            elapsed += 0.5f;
+
+            bool subscribed = false;
+
+            if (GameManager.Instance != null)
+            {
+                GameManager.Instance.OnChaosPhase.RemoveListener(ActivateZone);
+                GameManager.Instance.OnGameStart.RemoveListener(ResetZone);
+                GameManager.Instance.OnChaosPhase.AddListener(ActivateZone);
+                GameManager.Instance.OnGameStart.AddListener(ResetZone);
+                Debug.Log($"[DefenseZone] {zoneName} late-subscribed to GameManager events");
+                subscribed = true;
+            }
+
+            if (NetworkGameManager.Instance != null)
+            {
+                NetworkGameManager.Instance.OnPhaseChanged -= OnNetworkPhaseChanged;
+                NetworkGameManager.Instance.OnPhaseChanged += OnNetworkPhaseChanged;
+                Debug.Log($"[DefenseZone] {zoneName} late-subscribed to NetworkGameManager events");
+                subscribed = true;
+            }
+
+            if (subscribed) yield break;
         }
-        else
-        {
-            Debug.LogError($"[DefenseZone] {zoneName} - Still can't find GameManager!");
-        }
+
+        Debug.LogError($"[DefenseZone] {zoneName} - Failed to subscribe to any manager!");
     }
 
     void SetupVisuals()
@@ -294,15 +341,24 @@ public class DefenseZone : MonoBehaviour
 
     void OnTriggerEnter(Collider other)
     {
-        // Check if astronaut entered - try multiple detection methods
+        // Check if astronaut entered - try multiple detection methods INCLUDING parent hierarchy
         var player = other.GetComponent<PlayerMovement>();
-        var playerShooting = other.GetComponent<PlayerShooting>();
-        var stressSystem = other.GetComponent<StressSystem>();
+        if (player == null) player = other.GetComponentInParent<PlayerMovement>();
 
-        if (player != null || playerShooting != null || stressSystem != null)
+        var playerShooting = other.GetComponent<PlayerShooting>();
+        if (playerShooting == null) playerShooting = other.GetComponentInParent<PlayerShooting>();
+
+        var stressSystem = other.GetComponent<StressSystem>();
+        if (stressSystem == null) stressSystem = other.GetComponentInParent<StressSystem>();
+
+        // Also check for NetworkedPlayer that is astronaut
+        var networkedPlayer = other.GetComponentInParent<NetworkedPlayer>();
+        bool isNetworkedAstronaut = (networkedPlayer != null && networkedPlayer.isAstronaut && networkedPlayer.IsOwner);
+
+        if (player != null || playerShooting != null || stressSystem != null || isNetworkedAstronaut)
         {
             astronautInZone = true;
-            Debug.Log($"[DefenseZone] Astronaut entered {zoneName}");
+            Debug.Log($"[DefenseZone] Astronaut entered {zoneName} (isActive={isActive}, weaponCollected={weaponCollected})");
         }
     }
 
@@ -312,9 +368,15 @@ public class DefenseZone : MonoBehaviour
         if (!astronautInZone)
         {
             var player = other.GetComponent<PlayerMovement>();
-            var playerShooting = other.GetComponent<PlayerShooting>();
+            if (player == null) player = other.GetComponentInParent<PlayerMovement>();
 
-            if (player != null || playerShooting != null)
+            var playerShooting = other.GetComponent<PlayerShooting>();
+            if (playerShooting == null) playerShooting = other.GetComponentInParent<PlayerShooting>();
+
+            var networkedPlayer = other.GetComponentInParent<NetworkedPlayer>();
+            bool isNetworkedAstronaut = (networkedPlayer != null && networkedPlayer.isAstronaut && networkedPlayer.IsOwner);
+
+            if (player != null || playerShooting != null || isNetworkedAstronaut)
             {
                 astronautInZone = true;
                 Debug.Log($"[DefenseZone] Astronaut detected via OnTriggerStay in {zoneName}");
@@ -325,11 +387,18 @@ public class DefenseZone : MonoBehaviour
     void OnTriggerExit(Collider other)
     {
         var player = other.GetComponent<PlayerMovement>();
-        var playerShooting = other.GetComponent<PlayerShooting>();
+        if (player == null) player = other.GetComponentInParent<PlayerMovement>();
 
-        if (player != null || playerShooting != null)
+        var playerShooting = other.GetComponent<PlayerShooting>();
+        if (playerShooting == null) playerShooting = other.GetComponentInParent<PlayerShooting>();
+
+        var networkedPlayer = other.GetComponentInParent<NetworkedPlayer>();
+        bool isNetworkedAstronaut = (networkedPlayer != null && networkedPlayer.isAstronaut && networkedPlayer.IsOwner);
+
+        if (player != null || playerShooting != null || isNetworkedAstronaut)
         {
             astronautInZone = false;
+            Debug.Log($"[DefenseZone] Astronaut exited {zoneName}");
 
             if (GameUIManager.Instance != null)
             {
@@ -344,6 +413,11 @@ public class DefenseZone : MonoBehaviour
         {
             GameManager.Instance.OnChaosPhase.RemoveListener(ActivateZone);
             GameManager.Instance.OnGameStart.RemoveListener(ResetZone);
+        }
+
+        if (NetworkGameManager.Instance != null)
+        {
+            NetworkGameManager.Instance.OnPhaseChanged -= OnNetworkPhaseChanged;
         }
 
         if (NearestActiveZone == this)
