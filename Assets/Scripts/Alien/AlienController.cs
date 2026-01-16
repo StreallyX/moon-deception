@@ -123,49 +123,65 @@ public class AlienController : MonoBehaviour
             needsNewCamera = true;
         }
 
+        // 🔥 STEP 1: Disable ALL cameras and AudioListeners FIRST
+        Debug.Log("[AlienController] Disabling all other cameras...");
+        Camera[] allCameras = FindObjectsOfType<Camera>(true);
+        foreach (Camera cam in allCameras)
+        {
+            if (cam.gameObject != gameObject && (alienCamera == null || cam != alienCamera))
+            {
+                cam.gameObject.SetActive(false);
+                Debug.Log($"[AlienController] Disabled camera GameObject: {cam.gameObject.name}");
+            }
+        }
+
+        AudioListener[] allListeners = FindObjectsOfType<AudioListener>(true);
+        foreach (var listener in allListeners)
+        {
+            listener.enabled = false;
+        }
+
+        // 🔥 STEP 2: Create camera if needed
         if (needsNewCamera)
         {
-            // Create a camera for the alien
             Debug.Log("[AlienController] Creating runtime camera for Alien...");
             GameObject camObj = new GameObject("AlienCamera_Runtime");
-            camObj.transform.SetParent(null); // Don't parent to alien (we position it manually)
+            camObj.transform.SetParent(null);
+            camObj.tag = "MainCamera"; // Tag as main camera!
+
             alienCamera = camObj.AddComponent<Camera>();
-            alienCamera.depth = 1; // Higher than default to ensure it renders on top
+            alienCamera.depth = 10; // High depth to render on top
             alienCamera.nearClipPlane = 0.1f;
             alienCamera.farClipPlane = 1000f;
+            alienCamera.clearFlags = CameraClearFlags.Skybox;
 
-            // Remove any existing AudioListeners to avoid conflicts
-            AudioListener[] listeners = FindObjectsOfType<AudioListener>();
-            foreach (var listener in listeners)
-            {
-                if (listener.gameObject != camObj)
-                {
-                    listener.enabled = false;
-                }
-            }
             camObj.AddComponent<AudioListener>();
-
             cameraTransform = alienCamera.transform;
+
             Debug.Log($"[AlienController] Created runtime camera: {camObj.name}");
         }
 
+        // 🔥 STEP 3: Activate alien camera
         if (alienCamera != null)
         {
-            // IMPORTANT: Disable all other cameras first to avoid rendering conflicts
-            Camera[] allCameras = FindObjectsOfType<Camera>(true);
-            foreach (Camera cam in allCameras)
-            {
-                if (cam != alienCamera)
-                {
-                    cam.enabled = false;
-                    Debug.Log($"[AlienController] Disabled other camera: {cam.gameObject.name}");
-                }
-            }
-
             alienCamera.gameObject.SetActive(true);
             alienCamera.enabled = true;
+            alienCamera.gameObject.tag = "MainCamera";
             cameraTransform = alienCamera.transform;
-            Debug.Log($"[AlienController] Enabled camera: {alienCamera.gameObject.name}, depth={alienCamera.depth}");
+
+            // Enable AudioListener on our camera
+            AudioListener ourListener = alienCamera.GetComponent<AudioListener>();
+            if (ourListener == null)
+            {
+                ourListener = alienCamera.gameObject.AddComponent<AudioListener>();
+            }
+            ourListener.enabled = true;
+
+            Debug.Log($"[AlienController] ✅ ALIEN CAMERA ACTIVE: {alienCamera.gameObject.name}");
+        }
+        else
+        {
+            Debug.LogError("[AlienController] ❌ FAILED TO CREATE/FIND CAMERA!");
         }
 
         if (GameUIManager.Instance != null)

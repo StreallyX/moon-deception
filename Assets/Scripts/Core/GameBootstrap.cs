@@ -16,6 +16,7 @@ public class GameBootstrap : MonoBehaviour
     public bool createChaosLightingController = true;
     public bool createMapManager = true;
     public bool createSpawnManager = true;
+    public bool createBloodDecalManager = true;
     public bool createNetworkManager = true;
     public bool createNetworkGameManager = true;
     public bool createRoleAnnouncementUI = true;
@@ -108,6 +109,15 @@ public class GameBootstrap : MonoBehaviour
             Debug.Log("[GameBootstrap] Created SpawnManager");
         }
 
+        // Blood Decal Manager
+        if (createBloodDecalManager && BloodDecalManager.Instance == null)
+        {
+            GameObject bloodDecalObj = new GameObject("BloodDecalManager");
+            bloodDecalObj.AddComponent<BloodDecalManager>();
+            DontDestroyOnLoad(bloodDecalObj);
+            Debug.Log("[GameBootstrap] Created BloodDecalManager");
+        }
+
         // Network Manager
         if (createNetworkManager && NetworkManager.Singleton == null)
         {
@@ -121,12 +131,18 @@ public class GameBootstrap : MonoBehaviour
         }
 
         // Network Game Manager (handles roles and game state)
+        // NOTE: NetworkGameManager should be created as a PREFAB in the scene for proper sync.
+        // For now, we create it locally on both server and client.
+        // The server version will handle spawning players, client version will receive RPCs.
         if (createNetworkGameManager && NetworkGameManager.Instance == null)
         {
             GameObject networkGameObj = new GameObject("NetworkGameManager");
             networkGameObj.AddComponent<NetworkGameManager>();
+            // NOTE: NOT adding NetworkObject here - it needs to be a registered prefab for proper sync.
+            // For now, NetworkGameManager handles local state only.
+            // Server uses it to manage game, clients receive updates via other means.
             DontDestroyOnLoad(networkGameObj);
-            Debug.Log("[GameBootstrap] Created NetworkGameManager");
+            Debug.Log("[GameBootstrap] Created NetworkGameManager (local singleton)");
         }
 
         // Role Announcement UI

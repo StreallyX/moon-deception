@@ -344,6 +344,21 @@ public class AudioManager : MonoBehaviour
         PlaySFXWithPitch(clip, 0.95f, 1.05f, 1f);
     }
 
+    /// <summary>
+    /// Play gunshot with 3D spatial audio - so aliens can hear direction
+    /// </summary>
+    public void PlayGunshot3D(Vector3 position, bool isMinigun = false)
+    {
+        AudioClip clip = isMinigun && gunShotMinigun != null ? gunShotMinigun : gunShot;
+        if (clip == null)
+        {
+            Debug.LogWarning("[AudioManager] gunShot clip is NOT assigned!");
+            return;
+        }
+        // Gunshots are loud - heard from far away (100m)
+        PlaySFX3D(clip, position, 1f, 5f, 100f);
+    }
+
     public void PlayGunEmpty()
     {
         PlaySFX(gunEmpty);

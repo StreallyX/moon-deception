@@ -184,6 +184,9 @@ public class GameManager : MonoBehaviour
     /// </summary>
     public void OnNPCKilled(NPCBehavior npc)
     {
+        // Use StressSystem.Instance as fallback (works when player spawns after game start)
+        StressSystem stress = astronautStress ?? StressSystem.Instance;
+
         if (npc.IsAlien)
         {
             // Alien killed
@@ -191,9 +194,14 @@ public class GameManager : MonoBehaviour
             OnAlienKilled?.Invoke(aliensRemaining);
 
             // Reduce astronaut stress
-            if (astronautStress != null)
+            if (stress != null)
             {
-                astronautStress.OnAlienKilled();
+                stress.OnAlienKilled();
+                Debug.Log($"[GameManager] Alien killed - stress reduced");
+            }
+            else
+            {
+                Debug.LogWarning("[GameManager] StressSystem not found - cannot reduce stress");
             }
 
             Debug.Log($"[GameManager] Alien eliminated! {aliensRemaining} remaining.");
@@ -211,9 +219,14 @@ public class GameManager : MonoBehaviour
             OnInnocentKilled?.Invoke(innocentsKilled);
 
             // Increase astronaut stress
-            if (astronautStress != null)
+            if (stress != null)
             {
-                astronautStress.OnInnocentKilled();
+                stress.OnInnocentKilled();
+                Debug.Log($"[GameManager] Innocent killed - stress increased");
+            }
+            else
+            {
+                Debug.LogWarning("[GameManager] StressSystem not found - cannot add stress");
             }
 
             Debug.Log($"[GameManager] Innocent killed! Total: {innocentsKilled}");

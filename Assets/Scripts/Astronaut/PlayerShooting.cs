@@ -218,7 +218,8 @@ public class PlayerShooting : MonoBehaviour
 
         if (AudioManager.Instance != null)
         {
-            AudioManager.Instance.PlayGunshot();
+            // Use 3D spatial audio so aliens can hear gunshots with direction
+            AudioManager.Instance.PlayGunshot3D(transform.position);
         }
 
         if (enableCameraShake && CameraShake.Instance != null)

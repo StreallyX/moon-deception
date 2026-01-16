@@ -1,32 +1,30 @@
 using UnityEngine;
 using Unity.Netcode;
+using System.Collections;
 using System.Collections.Generic;
-using System.Linq;
 
 /// <summary>
 /// Server-only spawn manager for networked game.
-/// Handles player spawning, role assignment, and NPC spawning.
-/// This is NOT a NetworkBehaviour - it only runs on the server/host.
+/// Handles NPC spawning with NetworkObject sync.
+/// NPCs are spawned on server and automatically replicated to clients.
 /// </summary>
 public class NetworkSpawnManager : MonoBehaviour
 {
     public static NetworkSpawnManager Instance { get; private set; }
 
-    [Header("Player Prefabs (Must have NetworkObject)")]
-    public GameObject astronautPrefab;
-    public GameObject alienPrefab;
-
-    [Header("NPC Prefab (Must have NetworkObject)")]
+    [Header("NPC Prefab (Must have NetworkObject + registered in NetworkManager)")]
     public GameObject npcPrefab;
 
     [Header("Settings")]
-    public int npcCount = 10;
+    public int npcsPerZone = 5;
+    public int randomSeed = 12345; // Fixed seed for deterministic spawning
 
-    // Track spawned players
-    private Dictionary<ulong, NetworkObject> spawnedPlayers = new Dictionary<ulong, NetworkObject>();
-    private ulong astronautClientId = ulong.MaxValue;
+    [Header("Debug")]
+    [SerializeField] private bool isInitialized = false;
+    [SerializeField] private int totalNPCsSpawned = 0;
+
+    // Track spawned NPCs
     private List<NetworkObject> spawnedNPCs = new List<NetworkObject>();
-    private bool initialized = false;
 
     void Awake()
     {
@@ -40,324 +38,249 @@ public class NetworkSpawnManager : MonoBehaviour
 
     void Start()
     {
-        // Only run on server
+        // Only run on server/host
         if (NetworkManager.Singleton == null || !NetworkManager.Singleton.IsServer)
         {
-            Debug.LogWarning("[NetworkSpawnManager] Not running on server, destroying...");
-            Destroy(gameObject);
+            Debug.Log("[NetworkSpawnManager] Not server - this manager only runs on server");
+            enabled = false;
             return;
         }
 
-        Initialize();
+        Debug.Log("[NetworkSpawnManager] SERVER: Starting initialization...");
+        StartCoroutine(InitializeWorld());
     }
 
-    void Initialize()
+    /// <summary>
+    /// Main initialization - waits for zones then spawns everything
+    /// </summary>
+    IEnumerator InitializeWorld()
     {
-        if (initialized) return;
-        initialized = true;
+        Debug.Log("[NetworkSpawnManager] SERVER: Waiting for zones to load...");
 
-        Debug.Log($"[NetworkSpawnManager] Initializing on server...");
+        // Step 1: Wait for MapManager
+        float timeout = 10f;
+        float elapsed = 0f;
 
-        // Subscribe to client connections
-        NetworkManager.Singleton.OnClientConnectedCallback += OnClientConnected;
-        NetworkManager.Singleton.OnClientDisconnectCallback += OnClientDisconnected;
-
-        // Spawn NPCs once
-        SpawnNPCs();
-
-        // Spawn interactables (coffee machines, alarm terminals, defense zones)
-        SpawnInteractables();
-
-        // Spawn host's player immediately
-        SpawnPlayerForClient(NetworkManager.Singleton.LocalClientId);
-    }
-
-    void SpawnInteractables()
-    {
-        // Use SpawnManager if available
-        if (SpawnManager.Instance != null)
+        while (MapManager.Instance == null && elapsed < timeout)
         {
-            Debug.Log("[NetworkSpawnManager] Calling SpawnManager.SpawnAllEntities()...");
-            SpawnManager.Instance.SpawnAllEntities();
+            yield return new WaitForSeconds(0.5f);
+            elapsed += 0.5f;
+            Debug.Log("[NetworkSpawnManager] Waiting for MapManager...");
+        }
+
+        if (MapManager.Instance == null)
+        {
+            Debug.LogError("[NetworkSpawnManager] MapManager not found! Cannot spawn NPCs.");
+            yield break;
+        }
+
+        // Step 2: Wait for zones to be found
+        elapsed = 0f;
+        while (MapManager.Instance.ZoneCount == 0 && elapsed < timeout)
+        {
+            MapManager.Instance.FindAllZonesInScene();
+            yield return new WaitForSeconds(0.5f);
+            elapsed += 0.5f;
+            Debug.Log($"[NetworkSpawnManager] Looking for zones... found {MapManager.Instance.ZoneCount}");
+        }
+
+        if (MapManager.Instance.ZoneCount == 0)
+        {
+            Debug.LogWarning("[NetworkSpawnManager] No zones found - creating default zones via MapManager...");
+            MapManager.Instance.CreateDefaultZones();
+        }
+
+        if (MapManager.Instance.ZoneCount == 0)
+        {
+            Debug.LogError("[NetworkSpawnManager] Still no zones after creation! Cannot spawn NPCs.");
+            yield break;
+        }
+
+        Debug.Log($"[NetworkSpawnManager] SERVER: Found {MapManager.Instance.ZoneCount} zones!");
+
+        // Step 3: Check NPC prefab
+        if (npcPrefab == null)
+        {
+            Debug.LogError("[NetworkSpawnManager] NPC Prefab not assigned! Please assign it in Inspector.");
+            yield break;
+        }
+
+        // Check if prefab has NetworkObject
+        NetworkObject prefabNetObj = npcPrefab.GetComponent<NetworkObject>();
+        if (prefabNetObj == null)
+        {
+            Debug.LogWarning("[NetworkSpawnManager] NPC Prefab missing NetworkObject - adding it now...");
+            // Note: This won't work for network spawning! Prefab needs to be registered.
+            // Add it anyway for local testing
+            npcPrefab.AddComponent<NetworkObject>();
+        }
+
+        // Ensure prefab has NetworkTransform
+        if (npcPrefab.GetComponent<Unity.Netcode.Components.NetworkTransform>() == null)
+        {
+            Debug.Log("[NetworkSpawnManager] Adding NetworkTransform to NPC prefab...");
+            npcPrefab.AddComponent<Unity.Netcode.Components.NetworkTransform>();
+        }
+
+        // Step 4: Spawn NPCs with deterministic positions
+        Debug.Log("[NetworkSpawnManager] SERVER: Spawning NPCs...");
+        SpawnAllNPCs();
+
+        // Step 5: Mark as initialized
+        isInitialized = true;
+        Debug.Log($"[NetworkSpawnManager] SERVER: World ready! {totalNPCsSpawned} NPCs spawned.");
+
+        // Step 6: Notify clients (via NetworkGameManager)
+        if (NetworkGameManager.Instance != null)
+        {
+            // NetworkGameManager handles the WorldReady notification
+            Debug.Log("[NetworkSpawnManager] NetworkGameManager will notify clients.");
+        }
+    }
+
+    /// <summary>
+    /// Spawn NPCs in all zones using deterministic positions
+    /// </summary>
+    void SpawnAllNPCs()
+    {
+        // Use fixed seed for deterministic spawning (same positions every game)
+        Random.InitState(randomSeed);
+
+        foreach (var zone in MapManager.Instance.AllZones)
+        {
+            if (zone == null) continue;
+
+            SpawnNPCsInZone(zone);
+        }
+
+        // Reset random state
+        Random.InitState((int)System.DateTime.Now.Ticks);
+
+        Debug.Log($"[NetworkSpawnManager] Total NPCs spawned: {totalNPCsSpawned}");
+    }
+
+    /// <summary>
+    /// Spawn NPCs in a specific zone
+    /// </summary>
+    void SpawnNPCsInZone(MapZone zone)
+    {
+        Debug.Log($"[NetworkSpawnManager] Spawning {npcsPerZone} NPCs in zone '{zone.zoneName}'");
+
+        for (int i = 0; i < npcsPerZone; i++)
+        {
+            Vector3 position = GetSpawnPositionInZone(zone, i);
+            string npcName = $"NPC_{zone.zoneName}_{i + 1}";
+
+            SpawnSingleNPC(position, npcName);
+        }
+    }
+
+    /// <summary>
+    /// Get a spawn position in a zone (deterministic based on index)
+    /// </summary>
+    Vector3 GetSpawnPositionInZone(MapZone zone, int index)
+    {
+        // First try to use defined spawn points
+        if (zone.npcSpawnPoints != null && index < zone.npcSpawnPoints.Length)
+        {
+            Transform point = zone.npcSpawnPoints[index];
+            if (point != null)
+            {
+                return point.position;
+            }
+        }
+
+        // Fallback: random position within zone bounds
+        Bounds bounds = zone.Bounds;
+        float x = Random.Range(bounds.min.x + 2f, bounds.max.x - 2f);
+        float z = Random.Range(bounds.min.z + 2f, bounds.max.z - 2f);
+        float y = bounds.center.y;
+
+        return new Vector3(x, y, z);
+    }
+
+    /// <summary>
+    /// Spawn a single NPC and register it on the network
+    /// </summary>
+    void SpawnSingleNPC(Vector3 position, string npcName)
+    {
+        // Instantiate the prefab
+        GameObject npcObj = Instantiate(npcPrefab, position, Quaternion.identity);
+        npcObj.name = npcName;
+
+        // Ensure NetworkTransform exists for position sync
+        if (npcObj.GetComponent<Unity.Netcode.Components.NetworkTransform>() == null)
+        {
+            npcObj.AddComponent<Unity.Netcode.Components.NetworkTransform>();
+            Debug.Log($"[NetworkSpawnManager] Added NetworkTransform to NPC '{npcName}'");
+        }
+
+        // Get NetworkObject and spawn on network
+        NetworkObject netObj = npcObj.GetComponent<NetworkObject>();
+        if (netObj != null)
+        {
+            // Spawn on network - this replicates to all clients automatically!
+            netObj.Spawn();
+            spawnedNPCs.Add(netObj);
+            totalNPCsSpawned++;
+
+            Debug.Log($"[NetworkSpawnManager] Spawned NPC '{npcName}' at {position}");
         }
         else
         {
-            // Try to find or create SpawnManager
-            SpawnManager spawnMgr = FindObjectOfType<SpawnManager>();
-            if (spawnMgr == null)
+            Debug.LogError($"[NetworkSpawnManager] NPC prefab missing NetworkObject!");
+            Destroy(npcObj);
+        }
+
+        // Setup NPC behavior if exists
+        NPCBehavior npcBehavior = npcObj.GetComponent<NPCBehavior>();
+        if (npcBehavior != null)
+        {
+            // Set NPC name via reflection (if private field)
+            var field = typeof(NPCBehavior).GetField("npcName",
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            if (field != null)
             {
-                Debug.Log("[NetworkSpawnManager] Creating SpawnManager...");
-                GameObject spawnMgrObj = new GameObject("SpawnManager");
-                spawnMgr = spawnMgrObj.AddComponent<SpawnManager>();
+                field.SetValue(npcBehavior, npcName);
             }
-
-            // Wait a frame for initialization then spawn
-            StartCoroutine(DelayedSpawnInteractables(spawnMgr));
         }
     }
 
-    System.Collections.IEnumerator DelayedSpawnInteractables(SpawnManager spawnMgr)
+    /// <summary>
+    /// Called when a client connects - they automatically receive all spawned NPCs via Netcode
+    /// </summary>
+    public void OnClientConnected(ulong clientId)
     {
-        yield return null; // Wait one frame
-
-        if (spawnMgr != null)
-        {
-            Debug.Log("[NetworkSpawnManager] Spawning interactables (delayed)...");
-            spawnMgr.SpawnAllEntities();
-        }
+        Debug.Log($"[NetworkSpawnManager] Client {clientId} connected - they will receive {spawnedNPCs.Count} NPCs automatically via Netcode");
+        // No action needed - Netcode automatically syncs NetworkObjects to new clients
     }
 
-    void OnDestroy()
+    /// <summary>
+    /// Despawn all NPCs (for cleanup)
+    /// </summary>
+    public void DespawnAllNPCs()
     {
-        if (NetworkManager.Singleton != null)
-        {
-            NetworkManager.Singleton.OnClientConnectedCallback -= OnClientConnected;
-            NetworkManager.Singleton.OnClientDisconnectCallback -= OnClientDisconnected;
-        }
-    }
-
-    void OnClientConnected(ulong clientId)
-    {
-        if (NetworkManager.Singleton == null || !NetworkManager.Singleton.IsServer) return;
-
-        Debug.Log($"[NetworkSpawnManager] Client {clientId} connected");
-
-        // Don't spawn for host again (already spawned in OnNetworkSpawn)
-        if (clientId == NetworkManager.Singleton.LocalClientId && NetworkManager.Singleton.IsHost)
-        {
-            return;
-        }
-
-        SpawnPlayerForClient(clientId);
-    }
-
-    void OnClientDisconnected(ulong clientId)
-    {
-        if (NetworkManager.Singleton == null || !NetworkManager.Singleton.IsServer) return;
-
-        Debug.Log($"[NetworkSpawnManager] Client {clientId} disconnected");
-
-        // Despawn their player
-        if (spawnedPlayers.TryGetValue(clientId, out NetworkObject netObj))
+        foreach (var netObj in spawnedNPCs)
         {
             if (netObj != null && netObj.IsSpawned)
             {
                 netObj.Despawn();
             }
-            spawnedPlayers.Remove(clientId);
         }
+        spawnedNPCs.Clear();
+        totalNPCsSpawned = 0;
+        Debug.Log("[NetworkSpawnManager] All NPCs despawned");
     }
 
-    void SpawnPlayerForClient(ulong clientId)
+    void OnDestroy()
     {
-        if (NetworkManager.Singleton == null || !NetworkManager.Singleton.IsServer) return;
-
-        // First player is Astronaut, others are Aliens
-        bool isAstronaut = (astronautClientId == ulong.MaxValue);
-
-        if (isAstronaut)
+        if (Instance == this)
         {
-            astronautClientId = clientId;
+            Instance = null;
         }
-
-        GameObject prefab = isAstronaut ? astronautPrefab : alienPrefab;
-
-        if (prefab == null)
-        {
-            Debug.LogError($"[NetworkSpawnManager] {(isAstronaut ? "Astronaut" : "Alien")} prefab not assigned!");
-            return;
-        }
-
-        // Get spawn position
-        Vector3 spawnPos = GetSpawnPosition(isAstronaut);
-        Quaternion spawnRot = Quaternion.identity;
-
-        // Spawn the player
-        GameObject playerObj = Instantiate(prefab, spawnPos, spawnRot);
-        NetworkObject netObj = playerObj.GetComponent<NetworkObject>();
-
-        if (netObj == null)
-        {
-            Debug.LogError($"[NetworkSpawnManager] Prefab missing NetworkObject!");
-            Destroy(playerObj);
-            return;
-        }
-
-        // Get NetworkedPlayer and set role BEFORE spawning
-        NetworkedPlayer networkedPlayer = playerObj.GetComponent<NetworkedPlayer>();
-        if (networkedPlayer != null)
-        {
-            networkedPlayer.isAstronaut = isAstronaut;
-
-            // Try to set the NetworkVariable value before spawn (works in Netcode 1.5+)
-            // In older versions, this may fail - we'll set it after spawn as fallback
-            try
-            {
-                networkedPlayer.IsAstronautRole.Value = isAstronaut;
-                Debug.Log($"[NetworkSpawnManager] Set NetworkVariable BEFORE spawn: {(isAstronaut ? "Astronaut" : "Alien")}");
-            }
-            catch (System.Exception e)
-            {
-                Debug.Log($"[NetworkSpawnManager] Could not set NetworkVariable before spawn (will set after): {e.Message}");
-            }
-        }
-
-        // Spawn as player object (gives ownership to that client)
-        netObj.SpawnAsPlayerObject(clientId);
-        spawnedPlayers[clientId] = netObj;
-
-        // Set NetworkVariable after spawn (works in all Netcode versions)
-        // This ensures the value is set even if the pre-spawn set failed
-        if (networkedPlayer != null)
-        {
-            networkedPlayer.SetRole(isAstronaut);
-            Debug.Log($"[NetworkSpawnManager] Set NetworkVariable AFTER spawn: {(isAstronaut ? "Astronaut" : "Alien")}");
-        }
-
-        Debug.Log($"[NetworkSpawnManager] Spawned {(isAstronaut ? "ASTRONAUT" : "ALIEN")} for client {clientId} at {spawnPos}");
-
-        // Role notification is handled by NetworkedPlayer via NetworkVariable sync
-    }
-
-    Vector3 GetSpawnPosition(bool isAstronaut)
-    {
-        Debug.Log($"[NetworkSpawnManager] Getting spawn position for {(isAstronaut ? "ASTRONAUT" : "ALIEN")}");
-
-        // Try MapManager spawn points
-        if (MapManager.Instance != null)
-        {
-            var zones = MapManager.Instance.AllZones;
-            Debug.Log($"[NetworkSpawnManager] Found {zones?.Count ?? 0} zones");
-
-            if (zones != null && zones.Count > 0)
-            {
-                // Collect valid spawn points
-                System.Collections.Generic.List<Vector3> validPoints = new System.Collections.Generic.List<Vector3>();
-
-                foreach (var zone in zones)
-                {
-                    bool isValidZone = false;
-
-                    // Astronaut in Command zone
-                    if (isAstronaut && zone.zoneType == MapZone.ZoneType.Command)
-                    {
-                        isValidZone = true;
-                    }
-                    // Alien in non-Command zones (prefer Industrial or Research)
-                    else if (!isAstronaut && zone.zoneType != MapZone.ZoneType.Command)
-                    {
-                        isValidZone = true;
-                    }
-
-                    if (isValidZone && zone.npcSpawnPoints != null && zone.npcSpawnPoints.Length > 0)
-                    {
-                        foreach (var point in zone.npcSpawnPoints)
-                        {
-                            if (point != null)
-                            {
-                                validPoints.Add(point.position);
-                            }
-                        }
-                        Debug.Log($"[NetworkSpawnManager] Zone {zone.zoneType}: added {zone.npcSpawnPoints.Length} spawn points");
-                    }
-                }
-
-                // Pick random from valid points
-                if (validPoints.Count > 0)
-                {
-                    Vector3 pos = validPoints[Random.Range(0, validPoints.Count)];
-                    Debug.Log($"[NetworkSpawnManager] Selected spawn point: {pos}");
-                    return pos;
-                }
-
-                // Fallback: any zone with spawn points
-                Debug.Log("[NetworkSpawnManager] No valid zone found, using fallback");
-                foreach (var zone in zones)
-                {
-                    if (zone.npcSpawnPoints != null && zone.npcSpawnPoints.Length > 0)
-                    {
-                        Transform point = zone.npcSpawnPoints[Random.Range(0, zone.npcSpawnPoints.Length)];
-                        if (point != null) return point.position;
-                    }
-                }
-            }
-        }
-        else
-        {
-            Debug.LogWarning("[NetworkSpawnManager] MapManager.Instance is NULL!");
-        }
-
-        // Default fallback - DIFFERENT positions for each role
-        Vector3 fallbackPos = isAstronaut
-            ? new Vector3(0, 1, 0)
-            : new Vector3(10, 1, 10);  // Alien spawns 10 units away
-
-        Debug.Log($"[NetworkSpawnManager] Using fallback position: {fallbackPos}");
-        return fallbackPos;
-    }
-
-    void SpawnNPCs()
-    {
-        if (NetworkManager.Singleton == null || !NetworkManager.Singleton.IsServer) return;
-        if (npcPrefab == null)
-        {
-            Debug.LogWarning("[NetworkSpawnManager] NPC prefab not assigned, skipping NPC spawn");
-            return;
-        }
-
-        // Get all spawn points from zones
-        List<Vector3> spawnPoints = new List<Vector3>();
-
-        if (MapManager.Instance != null)
-        {
-            foreach (var zone in MapManager.Instance.AllZones)
-            {
-                if (zone.npcSpawnPoints != null)
-                {
-                    foreach (var point in zone.npcSpawnPoints)
-                    {
-                        if (point != null)
-                            spawnPoints.Add(point.position);
-                    }
-                }
-            }
-        }
-
-        // Fallback if no spawn points
-        if (spawnPoints.Count == 0)
-        {
-            for (int i = 0; i < npcCount; i++)
-            {
-                spawnPoints.Add(new Vector3(Random.Range(-20f, 20f), 1f, Random.Range(-20f, 20f)));
-            }
-        }
-
-        // Spawn NPCs
-        int spawned = 0;
-        foreach (var pos in spawnPoints)
-        {
-            if (spawned >= npcCount) break;
-
-            GameObject npcObj = Instantiate(npcPrefab, pos, Quaternion.identity);
-            NetworkObject netObj = npcObj.GetComponent<NetworkObject>();
-
-            if (netObj != null)
-            {
-                netObj.Spawn();
-                spawnedNPCs.Add(netObj);
-                spawned++;
-            }
-            else
-            {
-                Debug.LogWarning("[NetworkSpawnManager] NPC prefab missing NetworkObject!");
-                Destroy(npcObj);
-            }
-        }
-
-        Debug.Log($"[NetworkSpawnManager] Spawned {spawned} NPCs");
     }
 
     // Public getters
-    public bool IsClientAstronaut(ulong clientId) => clientId == astronautClientId;
-    public ulong GetAstronautClientId() => astronautClientId;
+    public bool IsInitialized => isInitialized;
+    public int NPCCount => totalNPCsSpawned;
 }

@@ -1204,7 +1204,8 @@ MonoBehaviour:
     NetworkTransport: {fileID: 459885621}
     PlayerPrefab: {fileID: 0}
     Prefabs:
-      NetworkPrefabsLists: []
+      NetworkPrefabsLists:
+      - {fileID: 11400000, guid: 877f74c723ab88c4abfecf3206c0ab6a, type: 2}
     TickRate: 30
     ClientConnectionBufferTimeout: 10
     ConnectionApproval: 0
@@ -1632,12 +1633,14 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 5a588664dd1a8b144938f29ca13156d9, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  createGameLoader: 1
   createAudioManager: 1
   createMenuManager: 1
   createPostProcessController: 1
   createChaosLightingController: 1
   createMapManager: 1
   createSpawnManager: 1
+  createBloodDecalManager: 1
   createNetworkManager: 1
   createNetworkGameManager: 1
   createRoleAnnouncementUI: 1
@@ -4244,7 +4247,7 @@ MonoBehaviour:
   networkSpawnManager: {fileID: 0}
   astronautPrefab: {fileID: 1456307801489296658, guid: bad84f20874586149b72418962545c87, type: 3}
   alienPrefab: {fileID: 538128873290854545, guid: 066853dcf8a374a4db4f57308ca4b6e1, type: 3}
-  npcPrefab: {fileID: 0}
+  npcPrefab: {fileID: 1714744776912737565, guid: 3fc80fd3de3b95843b823708ea0bba37, type: 3}
   npcCount: 12
 --- !u!4 &1964602099
 Transform:

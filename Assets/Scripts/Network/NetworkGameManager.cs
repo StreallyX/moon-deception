@@ -6,9 +6,9 @@ using System.Linq;
 
 /// <summary>
 /// Manages networked game state - role assignment, spawning, win conditions.
-/// Server authoritative.
+/// Server authoritative. Works as local singleton, with network events handled separately.
 /// </summary>
-public class NetworkGameManager : NetworkBehaviour
+public class NetworkGameManager : MonoBehaviour
 {
     public static NetworkGameManager Instance { get; private set; }
 
@@ -19,28 +19,17 @@ public class NetworkGameManager : NetworkBehaviour
     [Header("Settings")]
     public string menuSceneName = "MainMenu";
 
-    // Network synced game state
-    private NetworkVariable<GamePhase> currentPhase = new NetworkVariable<GamePhase>(
-        GamePhase.WaitingForPlayers,
-        NetworkVariableReadPermission.Everyone,
-        NetworkVariableWritePermission.Server
-    );
-
-    private NetworkVariable<float> gameTimer = new NetworkVariable<float>(
-        600f, // 10 minutes
-        NetworkVariableReadPermission.Everyone,
-        NetworkVariableWritePermission.Server
-    );
-
-    private NetworkVariable<ulong> astronautClientId = new NetworkVariable<ulong>(
-        ulong.MaxValue,
-        NetworkVariableReadPermission.Everyone,
-        NetworkVariableWritePermission.Server
-    );
+    // Game state (local, synced via events)
+    [SerializeField] private GamePhase currentPhase = GamePhase.WaitingForPlayers;
+    [SerializeField] private float gameTimer = 600f; // 10 minutes
+    [SerializeField] private ulong astronautClientId = ulong.MaxValue;
+    [SerializeField] private bool worldIsReady = false;
 
     // Local state
     private Dictionary<ulong, PlayerRole> playerRoles = new Dictionary<ulong, PlayerRole>();
+    private List<ulong> pendingClients = new List<ulong>(); // Clients waiting for game to start
     private bool gameStarted = false;
+    private bool isInitialized = false;
 
     public enum GamePhase
     {
@@ -62,6 +51,16 @@ public class NetworkGameManager : NetworkBehaviour
     public event System.Action<PlayerRole> OnLocalRoleAssigned;
     public event System.Action<GamePhase> OnPhaseChanged;
     public event System.Action<bool> OnGameEnded; // true = astronaut wins
+    public event System.Action OnWorldReady; // Called when server says world is ready
+
+    public bool IsWorldReady => worldIsReady;
+
+    // Network helpers
+    private bool IsServer => NetworkManager.Singleton != null && NetworkManager.Singleton.IsServer;
+    private bool IsHost => NetworkManager.Singleton != null && NetworkManager.Singleton.IsHost;
+    private bool IsClient => NetworkManager.Singleton != null && NetworkManager.Singleton.IsClient;
+    private bool IsNetworked => NetworkManager.Singleton != null &&
+                               (NetworkManager.Singleton.IsServer || NetworkManager.Singleton.IsClient);
 
     void Awake()
     {
@@ -73,42 +72,147 @@ public class NetworkGameManager : NetworkBehaviour
         Instance = this;
     }
 
-    public override void OnNetworkSpawn()
+    void Start()
     {
-        base.OnNetworkSpawn();
-
-        currentPhase.OnValueChanged += OnPhaseValueChanged;
-
-        if (IsServer)
-        {
-            NetworkManager.Singleton.OnClientConnectedCallback += OnClientConnected;
-            NetworkManager.Singleton.OnClientDisconnectCallback += OnClientDisconnected;
-
-            // Start game when scene loads
-            StartGame();
-        }
-
-        Debug.Log($"[NetworkGame] Spawned. IsServer: {IsServer}, IsHost: {IsHost}, IsClient: {IsClient}");
+        // Subscribe to NetworkManager events when it's ready
+        StartCoroutine(SubscribeToNetworkEvents());
     }
 
-    public override void OnNetworkDespawn()
+    System.Collections.IEnumerator SubscribeToNetworkEvents()
     {
-        currentPhase.OnValueChanged -= OnPhaseValueChanged;
-
-        if (IsServer && NetworkManager.Singleton != null)
+        // Wait for NetworkManager to exist
+        while (NetworkManager.Singleton == null)
         {
+            yield return new WaitForSeconds(0.1f);
+        }
+
+        // Subscribe to server/client start events
+        NetworkManager.Singleton.OnServerStarted += OnNetworkServerStarted;
+        NetworkManager.Singleton.OnClientConnectedCallback += OnNetworkClientConnected;
+
+        Debug.Log("[NetworkGame] Subscribed to NetworkManager events. Waiting for Host/Join...");
+    }
+
+    void OnNetworkServerStarted()
+    {
+        Debug.Log("[NetworkGame] SERVER STARTED - Initializing...");
+        NetworkManager.Singleton.OnClientConnectedCallback += OnClientConnected;
+        NetworkManager.Singleton.OnClientDisconnectCallback += OnClientDisconnected;
+        StartCoroutine(InitializeWorldAndStart());
+        isInitialized = true;
+    }
+
+    void OnNetworkClientConnected(ulong clientId)
+    {
+        // Only care about our own connection as a client (not host)
+        if (!IsServer && clientId == NetworkManager.Singleton.LocalClientId)
+        {
+            Debug.Log("[NetworkGame] CLIENT CONNECTED - Ready to receive game state");
+            isInitialized = true;
+        }
+    }
+
+    System.Collections.IEnumerator InitializeWorldAndStart()
+    {
+        Debug.Log("[NetworkGame] SERVER: Initializing world...");
+
+        // Wait for player prefabs to be assigned (SimpleNetworkTest assigns them)
+        float timeout = 5f;
+        float elapsed = 0f;
+        Debug.Log("[NetworkGame] SERVER: Waiting for player prefabs...");
+
+        while ((astronautPrefab == null || alienPrefab == null) && elapsed < timeout)
+        {
+            yield return new WaitForSeconds(0.1f);
+            elapsed += 0.1f;
+        }
+
+        if (astronautPrefab == null || alienPrefab == null)
+        {
+            Debug.LogError("[NetworkGame] Player prefabs not assigned! Make sure SimpleNetworkTest has prefabs set in Inspector.");
+            Debug.LogError($"  - astronautPrefab: {(astronautPrefab != null ? "OK" : "MISSING")}");
+            Debug.LogError($"  - alienPrefab: {(alienPrefab != null ? "OK" : "MISSING")}");
+            yield break;
+        }
+        Debug.Log("[NetworkGame] SERVER: Player prefabs ready!");
+
+        // Wait for MapManager to find zones
+        timeout = 10f;
+        elapsed = 0f;
+
+        while (elapsed < timeout)
+        {
+            if (MapManager.Instance != null && MapManager.Instance.ZoneCount > 0)
+            {
+                Debug.Log($"[NetworkGame] SERVER: Found {MapManager.Instance.ZoneCount} zones");
+                break;
+            }
+
+            // Try to find zones
+            if (MapManager.Instance != null)
+            {
+                MapManager.Instance.FindAllZonesInScene();
+            }
+
+            yield return new WaitForSeconds(0.5f);
+            elapsed += 0.5f;
+        }
+
+        // Spawn NPCs on server
+        if (NetworkSpawnManager.Instance != null)
+        {
+            Debug.Log("[NetworkGame] SERVER: NetworkSpawnManager will handle spawning");
+        }
+
+        // Mark world as ready
+        worldIsReady = true;
+        Debug.Log("[NetworkGame] SERVER: World is READY!");
+
+        // Notify local and clients
+        OnWorldReady?.Invoke();
+        NotifyWorldReadyToClients();
+
+        // Now start the game
+        StartGame();
+    }
+
+    void OnDestroy()
+    {
+        if (NetworkManager.Singleton != null)
+        {
+            NetworkManager.Singleton.OnServerStarted -= OnNetworkServerStarted;
+            NetworkManager.Singleton.OnClientConnectedCallback -= OnNetworkClientConnected;
             NetworkManager.Singleton.OnClientConnectedCallback -= OnClientConnected;
             NetworkManager.Singleton.OnClientDisconnectCallback -= OnClientDisconnected;
         }
-
-        base.OnNetworkDespawn();
     }
 
     // ==================== SERVER METHODS ====================
 
     void OnClientConnected(ulong clientId)
     {
-        Debug.Log($"[NetworkGame] Client connected: {clientId}");
+        Debug.Log($"[NetworkGame] Client connected: {clientId}, gameStarted={gameStarted}");
+
+        if (gameStarted)
+        {
+            // Game already started - spawn immediately as alien
+            if (!playerRoles.ContainsKey(clientId))
+            {
+                Debug.Log($"[NetworkGame] Late joiner {clientId} - spawning their alien player...");
+                PlayerRole role = PlayerRole.Alien;
+                playerRoles[clientId] = role;
+                SpawnPlayerForClient(clientId, role);
+            }
+        }
+        else
+        {
+            // Game not started yet - add to pending list
+            if (!pendingClients.Contains(clientId))
+            {
+                pendingClients.Add(clientId);
+                Debug.Log($"[NetworkGame] Client {clientId} added to pending list (waiting for game start)");
+            }
+        }
     }
 
     void OnClientDisconnected(ulong clientId)
@@ -117,7 +221,7 @@ public class NetworkGameManager : NetworkBehaviour
         playerRoles.Remove(clientId);
 
         // Check if astronaut left
-        if (clientId == astronautClientId.Value)
+        if (clientId == astronautClientId)
         {
             // Aliens win by default
             EndGame(false);
@@ -131,8 +235,25 @@ public class NetworkGameManager : NetworkBehaviour
 
         Debug.Log("[NetworkGame] Starting game, assigning roles...");
 
-        // Get all connected clients
+        // Get all connected clients + any pending clients
         var clients = NetworkManager.Singleton.ConnectedClientsIds.ToList();
+
+        // Also add any pending clients that might have been missed
+        foreach (var pendingId in pendingClients)
+        {
+            if (!clients.Contains(pendingId))
+            {
+                clients.Add(pendingId);
+                Debug.Log($"[NetworkGame] Added pending client {pendingId} to spawn list");
+            }
+        }
+        pendingClients.Clear();
+
+        Debug.Log($"[NetworkGame] Total clients to spawn: {clients.Count}");
+        foreach (var c in clients)
+        {
+            Debug.Log($"[NetworkGame]   - Client {c}");
+        }
 
         if (clients.Count == 0)
         {
@@ -140,23 +261,26 @@ public class NetworkGameManager : NetworkBehaviour
             return;
         }
 
-        // Randomly pick astronaut
+        // Randomly pick astronaut (host/first client is usually astronaut for testing)
         int astronautIndex = Random.Range(0, clients.Count);
         ulong astronautId = clients[astronautIndex];
-        astronautClientId.Value = astronautId;
+        astronautClientId = astronautId;
 
-        // Assign roles
+        Debug.Log($"[NetworkGame] Astronaut assigned to client {astronautId}");
+
+        // Assign roles and spawn
         foreach (var clientId in clients)
         {
             PlayerRole role = (clientId == astronautId) ? PlayerRole.Astronaut : PlayerRole.Alien;
             playerRoles[clientId] = role;
+            Debug.Log($"[NetworkGame] Spawning {role} for client {clientId}...");
 
             // Spawn player
             SpawnPlayerForClient(clientId, role);
         }
 
         // Start playing
-        currentPhase.Value = GamePhase.Playing;
+        SetPhase(GamePhase.Playing);
 
         Debug.Log($"[NetworkGame] Game started! Astronaut: Client {astronautId}");
     }
@@ -178,10 +302,28 @@ public class NetworkGameManager : NetworkBehaviour
         // Spawn networked player
         GameObject playerObj = Instantiate(prefab, spawnPos, spawnRot);
         NetworkObject netObj = playerObj.GetComponent<NetworkObject>();
+        NetworkedPlayer networkedPlayer = playerObj.GetComponent<NetworkedPlayer>();
 
         if (netObj != null)
         {
+            // IMPORTANT: Set the role BEFORE spawning so it syncs to clients!
+            if (networkedPlayer != null)
+            {
+                bool isAstronaut = (role == PlayerRole.Astronaut);
+                networkedPlayer.isAstronaut = isAstronaut;
+                // The NetworkVariable will be set in OnNetworkSpawn after we call Spawn
+                Debug.Log($"[NetworkGame] Set isAstronaut={isAstronaut} on prefab before spawn");
+            }
+
             netObj.SpawnAsPlayerObject(clientId);
+
+            // Set the NetworkVariable AFTER spawn (it needs to be spawned to sync)
+            if (networkedPlayer != null)
+            {
+                networkedPlayer.SetRole(role == PlayerRole.Astronaut);
+                Debug.Log($"[NetworkGame] Set NetworkVariable role for client {clientId}: {role}");
+            }
+
             Debug.Log($"[NetworkGame] Spawned {role} for client {clientId} at {spawnPos}");
         }
         else
@@ -190,14 +332,11 @@ public class NetworkGameManager : NetworkBehaviour
             Destroy(playerObj);
         }
 
-        // Notify client of their role
-        NotifyRoleClientRpc(role, new ClientRpcParams
+        // For local client (host), notify role directly
+        if (clientId == NetworkManager.Singleton.LocalClientId)
         {
-            Send = new ClientRpcSendParams
-            {
-                TargetClientIds = new ulong[] { clientId }
-            }
-        });
+            NotifyRoleLocally(role);
+        }
     }
 
     Vector3 GetSpawnPosition(PlayerRole role)
@@ -236,9 +375,9 @@ public class NetworkGameManager : NetworkBehaviour
     public void TriggerChaosPhase()
     {
         if (!IsServer) return;
-        if (currentPhase.Value != GamePhase.Playing) return;
+        if (currentPhase != GamePhase.Playing) return;
 
-        currentPhase.Value = GamePhase.Chaos;
+        SetPhase(GamePhase.Chaos);
         Debug.Log("[NetworkGame] CHAOS PHASE!");
     }
 
@@ -246,45 +385,60 @@ public class NetworkGameManager : NetworkBehaviour
     {
         if (!IsServer) return;
 
-        currentPhase.Value = GamePhase.Ended;
-        GameEndedClientRpc(astronautWins);
+        SetPhase(GamePhase.Ended);
+        NotifyGameEnded(astronautWins);
     }
 
     void Update()
     {
         if (!IsServer) return;
-        if (currentPhase.Value != GamePhase.Playing && currentPhase.Value != GamePhase.Chaos) return;
+        if (currentPhase != GamePhase.Playing && currentPhase != GamePhase.Chaos) return;
 
         // Update timer
-        gameTimer.Value -= Time.deltaTime;
+        gameTimer -= Time.deltaTime;
 
-        if (gameTimer.Value <= 0)
+        if (gameTimer <= 0)
         {
             // Time's up - Aliens win (astronaut didn't find them)
             EndGame(false);
         }
     }
 
-    // ==================== CLIENT RPCs ====================
+    // ==================== NOTIFICATIONS (Local - sync handled via NetworkedPlayer) ====================
 
-    [ClientRpc]
-    void NotifyRoleClientRpc(PlayerRole role, ClientRpcParams clientRpcParams = default)
+    /// <summary>
+    /// Called on server to notify a specific client of their role.
+    /// In current implementation, this is called locally after spawning player.
+    /// </summary>
+    void NotifyRoleLocally(PlayerRole role)
     {
-        Debug.Log($"[NetworkGame] You are: {role}");
+        Debug.Log($"[NetworkGame] Role assigned: {role}");
         OnLocalRoleAssigned?.Invoke(role);
-
-        // Show role UI
         ShowRoleUI(role);
     }
 
-    [ClientRpc]
-    void GameEndedClientRpc(bool astronautWins)
+    /// <summary>
+    /// Called when game ends - updates local state and shows UI.
+    /// </summary>
+    void NotifyGameEnded(bool astronautWins)
     {
         Debug.Log($"[NetworkGame] Game ended! Astronaut wins: {astronautWins}");
         OnGameEnded?.Invoke(astronautWins);
-
-        // Show end game UI
         ShowEndGameUI(astronautWins);
+    }
+
+    /// <summary>
+    /// Notify clients that world is ready (via SpawnManager callback).
+    /// </summary>
+    void NotifyWorldReadyToClients()
+    {
+        Debug.Log("[NetworkGame] Notifying: World is ready!");
+
+        // Tell SpawnManager to spawn local entities (interactables, defense zones)
+        if (SpawnManager.Instance != null)
+        {
+            SpawnManager.Instance.OnWorldReady();
+        }
     }
 
     // ==================== UI ====================
@@ -328,9 +482,9 @@ public class NetworkGameManager : NetworkBehaviour
 
     // ==================== PUBLIC GETTERS ====================
 
-    public GamePhase GetCurrentPhase() => currentPhase.Value;
-    public float GetTimeRemaining() => gameTimer.Value;
-    public bool IsAstronaut(ulong clientId) => astronautClientId.Value == clientId;
+    public GamePhase GetCurrentPhase() => currentPhase;
+    public float GetTimeRemaining() => gameTimer;
+    public bool IsAstronaut(ulong clientId) => astronautClientId == clientId;
     public bool IsLocalPlayerAstronaut() => IsAstronaut(NetworkManager.Singleton.LocalClientId);
 
     public PlayerRole GetLocalRole()
@@ -342,8 +496,16 @@ public class NetworkGameManager : NetworkBehaviour
 
     // ==================== PHASE CHANGE ====================
 
-    void OnPhaseValueChanged(GamePhase oldPhase, GamePhase newPhase)
+    /// <summary>
+    /// Sets the game phase and fires events.
+    /// </summary>
+    void SetPhase(GamePhase newPhase)
     {
+        if (currentPhase == newPhase) return;
+
+        GamePhase oldPhase = currentPhase;
+        currentPhase = newPhase;
+
         Debug.Log($"[NetworkGame] Phase changed: {oldPhase} -> {newPhase}");
         OnPhaseChanged?.Invoke(newPhase);
 

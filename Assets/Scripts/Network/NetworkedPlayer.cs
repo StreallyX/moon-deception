@@ -44,22 +44,13 @@ public class NetworkedPlayer : NetworkBehaviour
         base.OnNetworkSpawn();
 
         // CRITICAL: Check if we have the right NetworkTransform type
-        // If we have the old server-authoritative NetworkTransform, warn loudly!
         CheckNetworkTransformAuthority();
 
         // Subscribe to role changes FIRST (so we catch any updates)
         IsAstronautRole.OnValueChanged += OnRoleChanged;
 
-        // CRITICAL: Sync local field from NetworkVariable IMMEDIATELY
-        // On server, the field is already set by NetworkSpawnManager before spawn
-        // On client, we need to read from the NetworkVariable which syncs from server
-        if (!IsServer)
-        {
-            isAstronaut = IsAstronautRole.Value;
-            Debug.Log($"[NetworkedPlayer] CLIENT: Synced isAstronaut from NetworkVariable = {isAstronaut}");
-        }
-
-        Debug.Log($"[NetworkedPlayer] Spawned - IsOwner: {IsOwner}, IsServer: {IsServer}, ClientId: {OwnerClientId}, isAstronaut: {isAstronaut}, NetworkVar: {IsAstronautRole.Value}");
+        Debug.Log($"[NetworkedPlayer] OnNetworkSpawn - IsOwner: {IsOwner}, IsServer: {IsServer}, ClientId: {OwnerClientId}");
+        Debug.Log($"[NetworkedPlayer] Prefab isAstronaut={isAstronaut}, NetworkVar={IsAstronautRole.Value}");
 
         // Find ALL components
         FindAllComponents();
@@ -69,15 +60,17 @@ public class NetworkedPlayer : NetworkBehaviour
 
         if (IsOwner)
         {
-            // This is OUR player - enable the RIGHT controls and camera
-            EnableLocalPlayer();
-
-            // Safety check: If we're a client and NetworkVariable hasn't synced yet (still default true),
-            // start a coroutine to check again after a brief delay
-            if (!IsServer && IsAstronautRole.Value == true && alienController != null)
+            // For clients, wait a moment for NetworkVariable to sync before setup
+            if (!IsServer)
             {
-                Debug.Log("[NetworkedPlayer] CLIENT: NetworkVariable might not have synced yet, starting delayed check...");
-                StartCoroutine(DelayedRoleCheck());
+                Debug.Log("[NetworkedPlayer] CLIENT: Starting delayed setup to wait for NetworkVariable sync...");
+                StartCoroutine(DelayedClientSetup());
+            }
+            else
+            {
+                // Server/Host - setup immediately (role is already set)
+                isAstronaut = IsAstronautRole.Value;
+                EnableLocalPlayer();
             }
         }
         else
@@ -87,18 +80,48 @@ public class NetworkedPlayer : NetworkBehaviour
         }
     }
 
-    private IEnumerator DelayedRoleCheck()
+    private IEnumerator DelayedClientSetup()
     {
-        yield return new WaitForSeconds(0.2f);
+        // Wait for NetworkVariable to sync from server
+        float timeout = 2f;
+        float elapsed = 0f;
+        bool initialValue = IsAstronautRole.Value;
 
-        // Check if the role has changed from default
-        if (!hasSetupCompleted && IsOwner && IsAstronautRole.Value != isAstronaut)
+        Debug.Log($"[NetworkedPlayer] CLIENT: Waiting for role sync... current={initialValue}");
+
+        // Wait until either timeout or we get a different value (meaning sync happened)
+        // Or if value matches what the prefab expects (alienController exists = should be alien)
+        while (elapsed < timeout)
         {
-            Debug.Log($"[NetworkedPlayer] Delayed check: Role changed! NetworkVar={IsAstronautRole.Value}, local={isAstronaut}");
-            isAstronaut = IsAstronautRole.Value;
-            DisableAllComponents();
-            EnableLocalPlayer();
+            yield return new WaitForSeconds(0.1f);
+            elapsed += 0.1f;
+
+            // Check if NetworkVariable has a sensible value
+            bool hasAlienComponents = (alienController != null);
+            bool hasAstronautComponents = (playerMovement != null);
+            bool networkSaysAstronaut = IsAstronautRole.Value;
+
+            Debug.Log($"[NetworkedPlayer] CLIENT sync check: NetworkVar={networkSaysAstronaut}, hasAlien={hasAlienComponents}, hasAstro={hasAstronautComponents}");
+
+            // If we have alien components but network says alien (false), we're synced
+            if (hasAlienComponents && !networkSaysAstronaut)
+            {
+                Debug.Log("[NetworkedPlayer] CLIENT: Alien role confirmed!");
+                break;
+            }
+            // If we have astronaut components and network says astronaut (true), we're synced
+            if (hasAstronautComponents && !hasAlienComponents && networkSaysAstronaut)
+            {
+                Debug.Log("[NetworkedPlayer] CLIENT: Astronaut role confirmed!");
+                break;
+            }
         }
+
+        // Now setup with the synced role
+        isAstronaut = IsAstronautRole.Value;
+        Debug.Log($"[NetworkedPlayer] CLIENT: Final role = {(isAstronaut ? "Astronaut" : "Alien")}");
+
+        EnableLocalPlayer();
     }
 
     void FindAllComponents()
@@ -181,11 +204,18 @@ public class NetworkedPlayer : NetworkBehaviour
             // === ALIEN SETUP ===
             Debug.Log("[NetworkedPlayer] Setting up ALIEN controls");
 
+            // Make sure Astronaut components stay DISABLED FIRST
+            if (playerMovement != null) playerMovement.enabled = false;
+            if (playerShooting != null) playerShooting.enabled = false;
+            if (stressSystem != null) stressSystem.enabled = false;
+
             // Enable Alien components
             if (alienController != null)
             {
+                // IMPORTANT: AlienController.OnEnable() will handle camera setup
+                // So we enable it and let it do its thing
                 alienController.enabled = true;
-                Debug.Log($"[NetworkedPlayer] ENABLED AlienController (was: {!alienController.enabled})");
+                Debug.Log($"[NetworkedPlayer] ENABLED AlienController - it will handle camera");
             }
             else
             {
@@ -203,24 +233,38 @@ public class NetworkedPlayer : NetworkBehaviour
                 alienAbilities.enabled = true;
             }
 
-            // Make sure Astronaut components stay DISABLED
-            if (playerMovement != null) playerMovement.enabled = false;
-            if (playerShooting != null) playerShooting.enabled = false;
-            if (stressSystem != null) stressSystem.enabled = false;
-
             // Update UI for Alien
             if (GameUIManager.Instance != null)
             {
                 GameUIManager.Instance.SetPlayerType(PlayerType.Alien);
             }
+
+            // For alien, AlienController handles camera - skip the camera section below
+            // Lock cursor for gameplay
+            Cursor.lockState = CursorLockMode.Locked;
+            Cursor.visible = false;
+
+            Debug.Log($"[NetworkedPlayer] Alien setup complete");
+            hasSetupCompleted = true;
+
+            // Show role announcement
+            if (RoleAnnouncementUI.Instance != null)
+            {
+                RoleAnnouncementUI.Instance.ShowRole(false); // false = alien
+            }
+            return; // Exit early - AlienController handles camera
         }
 
-        // Enable camera and audio for local player
+        // Enable camera and audio for local player (ASTRONAUT ONLY - alien handled above)
         if (playerCamera != null)
         {
             playerCamera.gameObject.SetActive(true);
             playerCamera.enabled = true;
             Debug.Log($"[NetworkedPlayer] Enabled camera: {playerCamera.gameObject.name}");
+        }
+        else
+        {
+            Debug.LogWarning("[NetworkedPlayer] playerCamera is NULL for astronaut!");
         }
 
         if (audioListener != null)

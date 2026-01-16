@@ -1,12 +1,14 @@
 using UnityEngine;
+using Unity.Netcode;
 using System.Collections.Generic;
 
 /// <summary>
 /// Basic AI behavior for civilian NPCs on the moon base.
 /// NPCs patrol between waypoints and perform idle activities.
 /// Works without NavMesh - uses simple movement.
+/// SERVER-AUTHORITATIVE: AI runs on server, positions sync via NetworkTransform.
 /// </summary>
-public class NPCBehavior : MonoBehaviour, IDamageable
+public class NPCBehavior : NetworkBehaviour, IDamageable
 {
     public enum NPCState
     {
@@ -80,6 +82,10 @@ public class NPCBehavior : MonoBehaviour, IDamageable
 
     void Update()
     {
+        // Only server runs AI logic - clients receive synced position via NetworkTransform
+        // Also check IsSpawned to avoid errors during initialization
+        if (!IsSpawned || !IsServer) return;
+
         if (currentState == NPCState.Dead) return;
 
         stateTimer += Time.deltaTime;
@@ -297,6 +303,12 @@ public class NPCBehavior : MonoBehaviour, IDamageable
     {
         SetState(NPCState.Dead);
         Debug.Log($"[NPC] {npcName} died! IsAlien: {isAlien}");
+
+        // Spawn blood decal
+        if (BloodDecalManager.Instance != null)
+        {
+            BloodDecalManager.Instance.SpawnBloodDecal(transform.position);
+        }
 
         // Play death sound
         if (AudioManager.Instance != null)

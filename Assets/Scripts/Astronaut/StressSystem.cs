@@ -43,6 +43,10 @@ public class StressSystem : MonoBehaviour, IDamageable
     {
         // Don't set Instance here - it will be set in OnEnable
         // This prevents remote player's StressSystem from overwriting the local one
+
+        // Initialize events if null
+        if (OnStressMaxed == null) OnStressMaxed = new UnityEvent();
+        if (OnStressChanged == null) OnStressChanged = new UnityEvent<float>();
     }
 
     void OnEnable()
@@ -50,6 +54,41 @@ public class StressSystem : MonoBehaviour, IDamageable
         // Only set Instance when enabled (local player only)
         Instance = this;
         Debug.Log("[StressSystem] Instance set (OnEnable)");
+
+        // Auto-register with GameManager for chaos trigger
+        RegisterWithGameManager();
+    }
+
+    void RegisterWithGameManager()
+    {
+        if (GameManager.Instance != null)
+        {
+            // Subscribe OnStressMaxed to trigger chaos phase
+            OnStressMaxed.RemoveListener(GameManager.Instance.TriggerChaosPhase); // Avoid duplicates
+            OnStressMaxed.AddListener(GameManager.Instance.TriggerChaosPhase);
+            Debug.Log("[StressSystem] Registered with GameManager for chaos trigger");
+        }
+        else
+        {
+            // GameManager not ready yet, try again later
+            StartCoroutine(LateRegisterWithGameManager());
+        }
+    }
+
+    System.Collections.IEnumerator LateRegisterWithGameManager()
+    {
+        yield return new WaitForSeconds(0.5f);
+
+        if (GameManager.Instance != null)
+        {
+            OnStressMaxed.RemoveListener(GameManager.Instance.TriggerChaosPhase);
+            OnStressMaxed.AddListener(GameManager.Instance.TriggerChaosPhase);
+            Debug.Log("[StressSystem] Late-registered with GameManager for chaos trigger");
+        }
+        else
+        {
+            Debug.LogWarning("[StressSystem] Could not register with GameManager - not found!");
+        }
     }
 
     void OnDisable()

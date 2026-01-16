@@ -60,6 +60,13 @@ public class MapManager : MonoBehaviour
             FindAllZonesInScene();
         }
 
+        // If still no zones, create default zones
+        if (allZones.Count == 0)
+        {
+            Debug.Log("[MapManager] No zones found - creating default zones...");
+            CreateDefaultZones();
+        }
+
         Debug.Log($"[MapManager] Total zones registered: {allZones.Count}");
         foreach (var zone in allZones)
         {
@@ -67,6 +74,90 @@ public class MapManager : MonoBehaviour
             {
                 Debug.Log($"  - {zone.zoneName} ({zone.zoneType})");
             }
+        }
+    }
+
+    /// <summary>
+    /// Create default zones if none exist in the scene
+    /// </summary>
+    public void CreateDefaultZones()
+    {
+        Debug.Log("[MapManager] Creating default zones...");
+
+        // Create 4 zones in a grid pattern
+        Vector3[] zonePositions = new Vector3[]
+        {
+            new Vector3(-30f, 0f, 30f),   // Habitat
+            new Vector3(30f, 0f, 30f),    // Research
+            new Vector3(-30f, 0f, -30f),  // Industrial
+            new Vector3(30f, 0f, -30f)    // Command
+        };
+
+        MapZone.ZoneType[] zoneTypes = new MapZone.ZoneType[]
+        {
+            MapZone.ZoneType.Habitat,
+            MapZone.ZoneType.Research,
+            MapZone.ZoneType.Industrial,
+            MapZone.ZoneType.Command
+        };
+
+        Color[] zoneColors = new Color[]
+        {
+            Color.green,
+            Color.blue,
+            Color.yellow,
+            Color.red
+        };
+
+        for (int i = 0; i < zonePositions.Length; i++)
+        {
+            GameObject zoneObj = new GameObject($"Zone_{zoneTypes[i]}");
+            zoneObj.transform.position = zonePositions[i];
+
+            MapZone zone = zoneObj.AddComponent<MapZone>();
+            zone.zoneType = zoneTypes[i];
+            zone.zoneName = zoneTypes[i].ToString();
+            zone.zoneColor = zoneColors[i];
+
+            // Create BoxCollider for zone bounds
+            BoxCollider col = zoneObj.GetComponent<BoxCollider>();
+            if (col == null) col = zoneObj.AddComponent<BoxCollider>();
+            col.size = new Vector3(40f, 10f, 40f);
+            col.center = new Vector3(0f, 5f, 0f);
+            col.isTrigger = true;
+
+            // Create spawn points as child objects
+            zone.npcSpawnPoints = new Transform[5];
+            for (int j = 0; j < 5; j++)
+            {
+                GameObject spawnPoint = new GameObject($"NPCSpawn_{j + 1}");
+                spawnPoint.transform.SetParent(zoneObj.transform);
+                float offset = (j - 2f) * 4f;
+                spawnPoint.transform.localPosition = new Vector3(offset, 1f, 0f);
+                zone.npcSpawnPoints[j] = spawnPoint.transform;
+            }
+
+            // Create patrol waypoints
+            zone.patrolWaypoints = new Transform[4];
+            Vector3[] patrolOffsets = new Vector3[]
+            {
+                new Vector3(-10f, 1f, -10f),
+                new Vector3(10f, 1f, -10f),
+                new Vector3(10f, 1f, 10f),
+                new Vector3(-10f, 1f, 10f)
+            };
+            for (int j = 0; j < 4; j++)
+            {
+                GameObject waypoint = new GameObject($"Waypoint_{j + 1}");
+                waypoint.transform.SetParent(zoneObj.transform);
+                waypoint.transform.localPosition = patrolOffsets[j];
+                zone.patrolWaypoints[j] = waypoint.transform;
+            }
+
+            // Register the zone
+            RegisterZone(zone);
+
+            Debug.Log($"[MapManager] Created zone '{zone.zoneName}' at {zonePositions[i]}");
         }
     }
 
@@ -86,6 +177,23 @@ public class MapManager : MonoBehaviour
                 Debug.Log($"[MapManager] Auto-registered zone: {zone.zoneName} ({zone.zoneType})");
             }
         }
+    }
+
+    /// <summary>
+    /// Clear all zones and re-find them. Use this when scene changes or for clients joining.
+    /// </summary>
+    public void RefreshZones()
+    {
+        Debug.Log("[MapManager] Refreshing zones - clearing stale references...");
+
+        // Remove null/destroyed zone references
+        allZones.RemoveAll(z => z == null);
+
+        // Clear and re-find all zones
+        allZones.Clear();
+        FindAllZonesInScene();
+
+        Debug.Log($"[MapManager] Refresh complete: {allZones.Count} zones found");
     }
 
     /// <summary>

@@ -73,11 +73,49 @@ public class SimpleNetworkTest : MonoBehaviour
         // Register prefabs with NetworkManager
         RegisterPrefabs();
 
+        // IMPORTANT: Assign prefabs to managers NOW, before network starts
+        AssignPrefabsToManagers();
+
         // Subscribe to events
         if (NetworkManager.Singleton != null)
         {
             NetworkManager.Singleton.OnServerStarted += OnServerStarted;
             NetworkManager.Singleton.OnClientConnectedCallback += OnClientConnected;
+        }
+    }
+
+    void AssignPrefabsToManagers()
+    {
+        // Wait for NetworkGameManager to exist, then assign prefabs
+        StartCoroutine(AssignPrefabsWhenReady());
+    }
+
+    System.Collections.IEnumerator AssignPrefabsWhenReady()
+    {
+        // Wait for NetworkGameManager
+        float timeout = 5f;
+        float elapsed = 0f;
+        while (NetworkGameManager.Instance == null && elapsed < timeout)
+        {
+            yield return new WaitForSeconds(0.1f);
+            elapsed += 0.1f;
+        }
+
+        if (NetworkGameManager.Instance != null)
+        {
+            NetworkGameManager.Instance.astronautPrefab = astronautPrefab;
+            NetworkGameManager.Instance.alienPrefab = alienPrefab;
+            Debug.Log("[NetworkTest] Assigned player prefabs to NetworkGameManager");
+        }
+        else
+        {
+            Debug.LogWarning("[NetworkTest] NetworkGameManager not found - prefabs not assigned!");
+        }
+
+        // Also prepare NetworkSpawnManager reference
+        if (networkSpawnManager == null)
+        {
+            networkSpawnManager = FindObjectOfType<NetworkSpawnManager>();
         }
     }
 
@@ -198,14 +236,19 @@ public class SimpleNetworkTest : MonoBehaviour
         {
             GameObject spawnMgrObj = new GameObject("NetworkSpawnManager");
             networkSpawnManager = spawnMgrObj.AddComponent<NetworkSpawnManager>();
-            networkSpawnManager.astronautPrefab = astronautPrefab;
-            networkSpawnManager.alienPrefab = alienPrefab;
             networkSpawnManager.npcPrefab = npcPrefab;
-            networkSpawnManager.npcCount = npcCount;
+            networkSpawnManager.npcsPerZone = npcCount;
 
             // DON'T spawn as NetworkObject - it doesn't need to be synced
             // The manager just runs on the server and spawns players
             Debug.Log("[NetworkTest] NetworkSpawnManager created (server-only)");
+        }
+
+        // Set prefabs on NetworkGameManager (it handles player spawning)
+        if (NetworkGameManager.Instance != null)
+        {
+            NetworkGameManager.Instance.astronautPrefab = astronautPrefab;
+            NetworkGameManager.Instance.alienPrefab = alienPrefab;
         }
 
         // Destroy temp camera (player will have their own)

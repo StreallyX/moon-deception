@@ -43,6 +43,7 @@ public class SpawnManager : MonoBehaviour
     private Transform astronautTransform;
     private bool hasSpawnedEntities = false;
     private bool hasSpawnedInteractables = false;
+    private bool hasSpawnedNPCs = false;
 
     void Awake()
     {
@@ -72,46 +73,253 @@ public class SpawnManager : MonoBehaviour
         StartCoroutine(ClientSideSpawnCheck());
     }
 
-    System.Collections.IEnumerator ClientSideSpawnCheck()
+    /// <summary>
+    /// Reset all spawn flags - call when starting a new game or joining
+    /// </summary>
+    public void ResetSpawnFlags()
     {
-        // Wait for network to initialize and MapManager to find zones
-        yield return new WaitForSeconds(3f);
+        hasSpawnedEntities = false;
+        hasSpawnedInteractables = false;
+        hasSpawnedNPCs = false;
+        Debug.Log("[SpawnManager] Spawn flags reset");
+    }
 
-        // Log MapManager status
+    /// <summary>
+    /// Called by NetworkGameManager when server says world is ready.
+    /// Client can now safely spawn local entities.
+    /// </summary>
+    public void OnWorldReady()
+    {
+        Debug.Log("[SpawnManager] OnWorldReady called!");
+
+        bool isClient = NetworkManager.Singleton != null &&
+                       NetworkManager.Singleton.IsClient &&
+                       !NetworkManager.Singleton.IsServer;
+
+        if (isClient)
+        {
+            // Client: spawn local entities now that world is ready
+            StartCoroutine(SpawnClientEntities());
+        }
+        else if (NetworkManager.Singleton == null)
+        {
+            // Single player
+            SpawnAllEntities();
+        }
+        // Server doesn't need to do anything here - it already spawned via NetworkSpawnManager
+    }
+
+    System.Collections.IEnumerator SpawnClientEntities()
+    {
+        Debug.Log("[SpawnManager] CLIENT: Setting up local view...");
+
+        // Reset flags
+        ResetSpawnFlags();
+
+        // Wait a moment for scene to be fully ready
+        yield return new WaitForSeconds(0.5f);
+
+        // Find zones - they should exist in the scene
         if (MapManager.Instance != null)
         {
-            Debug.Log($"[SpawnManager] MapManager found with {MapManager.Instance.ZoneCount} zones");
-            foreach (var zone in MapManager.Instance.AllZones)
-            {
-                if (zone != null)
-                {
-                    int interactablePoints = zone.interactableSpawnPoints?.Length ?? 0;
-                    int defensePoints = zone.defenseZoneSpawnPoints?.Length ?? 0;
-                    Debug.Log($"[SpawnManager] Zone '{zone.zoneName}': {interactablePoints} interactable points, {defensePoints} defense points");
-                }
-            }
+            MapManager.Instance.RefreshZones();
+            Debug.Log($"[SpawnManager] CLIENT: Found {MapManager.Instance.ZoneCount} zones");
+        }
+
+        // NOTE: NPCs are spawned by SERVER via NetworkSpawnManager
+        // Clients receive them automatically via Netcode - no local spawn needed!
+
+        // Only spawn interactables locally (they don't need to sync)
+        if (!hasSpawnedInteractables && MapManager.Instance != null && MapManager.Instance.ZoneCount > 0)
+        {
+            hasSpawnedInteractables = true;
+            // NO SpawnNPCsLocally() - server handles NPCs!
+            SpawnDefenseZones();
+            SpawnInteractables();
+            Debug.Log("[SpawnManager] CLIENT: Local interactables spawned!");
         }
         else
         {
-            Debug.LogWarning("[SpawnManager] MapManager.Instance is NULL!");
+            Debug.LogWarning($"[SpawnManager] CLIENT: Cannot spawn - zones: {MapManager.Instance?.ZoneCount ?? 0}");
         }
+    }
 
-        // Only spawn if we're a client (not server/host)
-        if (NetworkManager.Singleton != null && NetworkManager.Singleton.IsClient && !NetworkManager.Singleton.IsServer)
+    System.Collections.IEnumerator ClientSideSpawnCheck()
+    {
+        Debug.Log("[SpawnManager] ClientSideSpawnCheck starting...");
+
+        // Wait for network to initialize - need to wait for connection to complete
+        float timeout = 10f;
+        float elapsed = 0f;
+
+        // Wait until we know our network role
+        while (elapsed < timeout)
         {
-            if (!hasSpawnedInteractables)
+            yield return new WaitForSeconds(0.5f);
+            elapsed += 0.5f;
+
+            // No network = single player
+            if (NetworkManager.Singleton == null)
             {
-                hasSpawnedInteractables = true;
-                Debug.Log("[SpawnManager] Client detected - spawning interactables locally");
-                SpawnDefenseZones();
-                SpawnInteractables();
+                Debug.Log("[SpawnManager] Single player mode - spawning entities");
+                yield return new WaitForSeconds(0.5f);
+                SpawnAllEntities();
+                yield break;
+            }
+
+            // Check if we're connected
+            bool isConnected = NetworkManager.Singleton.IsClient || NetworkManager.Singleton.IsServer;
+            if (!isConnected)
+            {
+                Debug.Log($"[SpawnManager] Waiting for network connection... ({elapsed}s)");
+                continue;
+            }
+
+            // We're connected - determine role
+            bool isClientOnly = NetworkManager.Singleton.IsClient && !NetworkManager.Singleton.IsServer;
+            bool isServer = NetworkManager.Singleton.IsServer;
+
+            Debug.Log($"[SpawnManager] Connected! IsClient={NetworkManager.Singleton.IsClient}, IsServer={isServer}, IsHost={NetworkManager.Singleton.IsHost}");
+
+            if (isServer)
+            {
+                // Server/Host: NetworkSpawnManager handles everything
+                Debug.Log("[SpawnManager] SERVER/HOST mode - NetworkSpawnManager handles spawning");
+                yield break;
+            }
+
+            if (isClientOnly)
+            {
+                // Pure client: wait for WorldReady signal from server
+                Debug.Log("[SpawnManager] CLIENT mode - waiting for WorldReady signal from server...");
+
+                // Check if world is already ready (we joined late)
+                if (NetworkGameManager.Instance != null && NetworkGameManager.Instance.IsWorldReady)
+                {
+                    Debug.Log("[SpawnManager] CLIENT: World already ready!");
+                    OnWorldReady();
+                }
+                // Otherwise, WorldReady will be called via ClientRpc when server is ready
+                yield break;
             }
         }
-        // Also spawn if no network at all (single player mode)
-        else if (NetworkManager.Singleton == null)
+
+        Debug.LogWarning("[SpawnManager] Timeout waiting for network role determination");
+    }
+
+    // ==================== NPC SPAWNING ====================
+
+    [Header("NPC Settings")]
+    public int npcsPerZone = 5;
+
+    /// <summary>
+    /// Spawn NPCs locally (for clients or single player)
+    /// Uses deterministic positioning based on zone
+    /// </summary>
+    public void SpawnNPCsLocally()
+    {
+        // Prevent double spawning
+        if (hasSpawnedNPCs)
         {
-            Debug.Log("[SpawnManager] No network - spawning interactables for single player");
-            SpawnAllEntities();
+            Debug.Log("[SpawnManager] NPCs already spawned, skipping");
+            return;
+        }
+
+        if (MapManager.Instance == null || MapManager.Instance.ZoneCount == 0)
+        {
+            Debug.LogWarning("[SpawnManager] No zones found for NPC spawning");
+            return;
+        }
+
+        hasSpawnedNPCs = true;
+        int totalSpawned = 0;
+
+        foreach (var zone in MapManager.Instance.AllZones)
+        {
+            if (zone == null) continue;
+
+            // Use zone name as seed for deterministic positioning
+            int seed = zone.zoneName.GetHashCode();
+            Random.InitState(seed);
+
+            for (int i = 0; i < npcsPerZone; i++)
+            {
+                Vector3 pos = GetRandomPositionInZone(zone);
+                string npcName = $"Crew_{zone.zoneName}_{i + 1}";
+
+                CreateLocalNPC(pos, npcName);
+                totalSpawned++;
+            }
+        }
+
+        // Reset random state
+        Random.InitState((int)System.DateTime.Now.Ticks);
+
+        Debug.Log($"[SpawnManager] Spawned {totalSpawned} NPCs locally");
+    }
+
+    Vector3 GetRandomPositionInZone(MapZone zone)
+    {
+        Bounds bounds = zone.Bounds;
+        float x = Random.Range(bounds.min.x + 2f, bounds.max.x - 2f);
+        float z = Random.Range(bounds.min.z + 2f, bounds.max.z - 2f);
+        float y = 1f; // Ground level
+
+        return new Vector3(x, y, z);
+    }
+
+    void CreateLocalNPC(Vector3 position, string npcName)
+    {
+        GameObject npcObj;
+
+        if (npcPrefab != null)
+        {
+            npcObj = Instantiate(npcPrefab, position, Quaternion.identity);
+        }
+        else
+        {
+            // Create basic NPC
+            npcObj = new GameObject(npcName);
+            npcObj.transform.position = position;
+
+            // Add visual (capsule)
+            GameObject visual = GameObject.CreatePrimitive(PrimitiveType.Capsule);
+            visual.transform.SetParent(npcObj.transform);
+            visual.transform.localPosition = new Vector3(0, 1f, 0);
+            visual.transform.localScale = new Vector3(0.8f, 1f, 0.8f);
+
+            // Set color (crew uniform - blue/grey)
+            var renderer = visual.GetComponent<Renderer>();
+            if (renderer != null)
+            {
+                renderer.material.color = new Color(0.3f, 0.4f, 0.6f);
+            }
+
+            // Remove collider from visual
+            var visualCollider = visual.GetComponent<Collider>();
+            if (visualCollider != null) Destroy(visualCollider);
+
+            // Add CharacterController to main object
+            var cc = npcObj.AddComponent<CharacterController>();
+            cc.center = new Vector3(0, 1f, 0);
+            cc.height = 2f;
+            cc.radius = 0.4f;
+        }
+
+        npcObj.name = npcName;
+
+        // Add NPCBehavior
+        var npc = npcObj.GetComponent<NPCBehavior>();
+        if (npc == null)
+        {
+            npc = npcObj.AddComponent<NPCBehavior>();
+        }
+
+        // Set NPC name
+        var field = typeof(NPCBehavior).GetField("npcName", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        if (field != null)
+        {
+            field.SetValue(npc, npcName);
         }
     }
 
@@ -141,13 +349,26 @@ public class SpawnManager : MonoBehaviour
             }
         }
 
-        // 1. Assign aliens to existing NPCs
+        // 1. Spawn NPCs (only in single player mode - NetworkSpawnManager handles multiplayer NPCs)
+        bool isMultiplayer = NetworkManager.Singleton != null &&
+                            (NetworkManager.Singleton.IsServer || NetworkManager.Singleton.IsClient);
+        if (!isMultiplayer)
+        {
+            // Single player only - spawn NPCs locally
+            SpawnNPCsLocally();
+        }
+        else
+        {
+            Debug.Log("[SpawnManager] Multiplayer mode - skipping NPC spawn (NetworkSpawnManager handles it)");
+        }
+
+        // 2. Assign aliens to NPCs
         AssignAliensToNPCs(aliensToAssign);
 
-        // 2. Spawn defense zones
+        // 3. Spawn defense zones
         SpawnDefenseZones();
 
-        // 3. Spawn interactables
+        // 4. Spawn interactables
         SpawnInteractables();
 
         Debug.Log("[SpawnManager] ========== SPAWNING COMPLETE ==========");

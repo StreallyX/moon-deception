@@ -85,6 +85,9 @@ public class GameLoader : MonoBehaviour
         UpdateProgress(0.05f, "Initializing scene...");
         yield return new WaitForSeconds(0.5f);
 
+        // Step 0: Wait for network connection if we're joining
+        yield return StartCoroutine(WaitForNetworkConnection());
+
         // Step 1: Wait for MapManager
         yield return StartCoroutine(WaitForMapManager());
 
@@ -133,10 +136,54 @@ public class GameLoader : MonoBehaviour
         }
     }
 
+    IEnumerator WaitForNetworkConnection()
+    {
+        // Skip if no network manager
+        if (NetworkManager.Singleton == null)
+        {
+            Debug.Log("[GameLoader] No NetworkManager - skipping network wait");
+            yield break;
+        }
+
+        // Skip if we're the host/server (already connected)
+        if (NetworkManager.Singleton.IsServer || NetworkManager.Singleton.IsHost)
+        {
+            Debug.Log("[GameLoader] We are host/server - skipping network wait");
+            yield break;
+        }
+
+        // Wait for client to be connected
+        UpdateProgress(0.07f, "Connecting to server...");
+        float timeout = Time.time + maxWaitTime;
+
+        while (!NetworkManager.Singleton.IsConnectedClient && Time.time < timeout)
+        {
+            Debug.Log("[GameLoader] Waiting for client connection...");
+            yield return new WaitForSeconds(0.3f);
+        }
+
+        if (NetworkManager.Singleton.IsConnectedClient)
+        {
+            Debug.Log("[GameLoader] Client connected successfully!");
+            // Give extra time for scene sync
+            yield return new WaitForSeconds(1f);
+        }
+        else
+        {
+            Debug.LogWarning("[GameLoader] Client connection timeout - proceeding anyway");
+        }
+    }
+
     IEnumerator WaitForMapManager()
     {
         UpdateProgress(0.1f, "Searching for map zones...");
         Debug.Log("[GameLoader] Starting WaitForMapManager...");
+
+        // Check if we're a client
+        bool isClient = NetworkManager.Singleton != null &&
+                       NetworkManager.Singleton.IsClient &&
+                       !NetworkManager.Singleton.IsServer;
+        Debug.Log($"[GameLoader] IsClient: {isClient}");
 
         // Wait for MapManager to exist
         float timeout = Time.time + maxWaitTime;
@@ -148,10 +195,24 @@ public class GameLoader : MonoBehaviour
 
         if (MapManager.Instance == null)
         {
-            Debug.LogError("[GameLoader] MapManager not found! Creating one...");
-            GameObject mapMgrObj = new GameObject("MapManager");
-            mapMgrObj.AddComponent<MapManager>();
-            yield return null;
+            // CLIENTS should NEVER create managers - they must exist in scene or be spawned by server
+            if (isClient)
+            {
+                Debug.LogWarning("[GameLoader] CLIENT: MapManager not found - waiting for server...");
+                // Keep waiting, don't create
+                while (MapManager.Instance == null && Time.time < timeout)
+                {
+                    yield return new WaitForSeconds(0.3f);
+                }
+            }
+            else
+            {
+                // Server/Single player can create if needed
+                Debug.LogWarning("[GameLoader] SERVER: MapManager not found! Creating one...");
+                GameObject mapMgrObj = new GameObject("MapManager");
+                mapMgrObj.AddComponent<MapManager>();
+                yield return null;
+            }
         }
 
         Debug.Log($"[GameLoader] MapManager found. Current zone count: {MapManager.Instance.ZoneCount}");
@@ -160,11 +221,19 @@ public class GameLoader : MonoBehaviour
         // Wait for MapZone.Start() to run (they register themselves)
         yield return new WaitForSeconds(0.5f);
 
-        // Also force find zones in case some didn't register
-        MapManager.Instance.FindAllZonesInScene();
+        // For clients or if no zones found, refresh zones (clears stale refs and re-finds)
+        if (isClient || MapManager.Instance.ZoneCount == 0)
+        {
+            Debug.Log("[GameLoader] Refreshing zones...");
+            MapManager.Instance.RefreshZones();
+        }
+        else
+        {
+            MapManager.Instance.FindAllZonesInScene();
+        }
         yield return new WaitForSeconds(0.2f);
 
-        Debug.Log($"[GameLoader] After FindAllZonesInScene: {MapManager.Instance.ZoneCount} zones");
+        Debug.Log($"[GameLoader] After zone search: {MapManager.Instance.ZoneCount} zones");
 
         // Keep checking until we have zones or timeout
         timeout = Time.time + maxWaitTime;
@@ -189,8 +258,8 @@ public class GameLoader : MonoBehaviour
             }
             else
             {
-                // Try finding zones again
-                MapManager.Instance.FindAllZonesInScene();
+                // Try refreshing zones again
+                MapManager.Instance.RefreshZones();
                 float zoneProgress = zoneCount > 0 ? (float)zoneCount / expectedZoneCount : 0f;
                 UpdateProgress(0.15f + (zoneProgress * 0.15f), $"Loading zones ({zoneCount}/{expectedZoneCount})...");
             }
@@ -226,6 +295,10 @@ public class GameLoader : MonoBehaviour
         UpdateProgress(0.4f, "Initializing spawn system...");
         float timeout = Time.time + maxWaitTime;
 
+        bool isClient = NetworkManager.Singleton != null &&
+                       NetworkManager.Singleton.IsClient &&
+                       !NetworkManager.Singleton.IsServer;
+
         while (!spawnManagerReady && Time.time < timeout)
         {
             if (SpawnManager.Instance != null)
@@ -238,10 +311,19 @@ public class GameLoader : MonoBehaviour
 
         if (!spawnManagerReady)
         {
-            Debug.LogWarning("[GameLoader] SpawnManager timeout - creating new instance");
-            GameObject spawnMgrObj = new GameObject("SpawnManager");
-            spawnMgrObj.AddComponent<SpawnManager>();
-            spawnManagerReady = true;
+            // CLIENTS should NEVER create managers
+            if (isClient)
+            {
+                Debug.LogWarning("[GameLoader] CLIENT: SpawnManager not found - continuing without it");
+                spawnManagerReady = true; // Mark as ready to continue loading
+            }
+            else
+            {
+                Debug.LogWarning("[GameLoader] SERVER: SpawnManager timeout - creating new instance");
+                GameObject spawnMgrObj = new GameObject("SpawnManager");
+                spawnMgrObj.AddComponent<SpawnManager>();
+                spawnManagerReady = true;
+            }
         }
 
         UpdateProgress(0.5f, "Spawn system ready");
