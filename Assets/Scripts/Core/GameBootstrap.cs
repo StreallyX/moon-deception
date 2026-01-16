@@ -16,6 +16,8 @@ public class GameBootstrap : MonoBehaviour
     public bool createMapManager = true;
     public bool createSpawnManager = true;
     public bool createNetworkManager = true;
+    public bool createNetworkGameManager = true;
+    public bool createRoleAnnouncementUI = true;
 
     [Header("Player Setup")]
     public bool addCameraShakeToPlayer = true;
@@ -105,6 +107,24 @@ public class GameBootstrap : MonoBehaviour
             networkManagerObj.AddComponent<NetworkConnectionUI>();
             DontDestroyOnLoad(networkManagerObj);
             Debug.Log("[GameBootstrap] Created NetworkManager");
+        }
+
+        // Network Game Manager (handles roles and game state)
+        if (createNetworkGameManager && NetworkGameManager.Instance == null)
+        {
+            GameObject networkGameObj = new GameObject("NetworkGameManager");
+            networkGameObj.AddComponent<NetworkGameManager>();
+            DontDestroyOnLoad(networkGameObj);
+            Debug.Log("[GameBootstrap] Created NetworkGameManager");
+        }
+
+        // Role Announcement UI
+        if (createRoleAnnouncementUI && RoleAnnouncementUI.Instance == null)
+        {
+            GameObject roleUIObj = new GameObject("RoleAnnouncementUI");
+            roleUIObj.AddComponent<RoleAnnouncementUI>();
+            DontDestroyOnLoad(roleUIObj);
+            Debug.Log("[GameBootstrap] Created RoleAnnouncementUI");
         }
 
         // Add CameraShake to player camera

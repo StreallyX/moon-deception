@@ -227,16 +227,20 @@
   - Added Y-position lock in ApplyGravity()
 - **PHASE 3 COMPLETE** - Ready for Phase 4 Multiplayer
 
-### Session 7 (2026-01-16) - PHASE 4 START
-- **Phase 4.1: Multiplayer Setup** - IN PROGRESS
-  - Created NetworkManagerSetup.cs - Configures NetworkManager
-  - Created NetworkConnectionUI.cs - Host/Join UI (H/J keys, F1 toggle)
-  - Updated GameBootstrap.cs - Auto-creates NetworkManager
-  - **WAITING**: User needs to install Netcode for GameObjects package
+### Session 7 (2026-01-16) - PHASE 4 + STEAM
+- **Switched to Steam Lobby System** (combining Phase 4 + 5)
+- **Steamworks.NET installed** via Unity Package
+- **Scripts Created:**
+  - SteamManager.cs - Steam API initialization
+  - SteamLobbyManager.cs - Create/Join/Leave lobbies, player sync
+  - MainMenuUI.cs - Main menu panel controller
+  - LobbyBrowserUI.cs - Browse/create lobbies
+  - LobbyRoomUI.cs - Lobby room with player list, ready, start
+- **WAITING**: User needs to create Canvas UI in Unity
 - **Next Steps**:
-  1. User installs package: com.unity.netcode.gameobjects
-  2. Test Host/Join with 2 Unity instances
-  3. Then Phase 4.2: Player Sync
+  1. Create Canvas UI elements (see instructions)
+  2. Test Steam lobby with 2 builds
+  3. Add player spawning and role assignment
 
 ---
 
