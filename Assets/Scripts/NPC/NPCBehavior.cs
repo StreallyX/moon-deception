@@ -112,10 +112,10 @@ public class NPCBehavior : NetworkBehaviour, IDamageable
 
     private void ApplyGravity()
     {
-        // Simple approach: lock Y to start position (NPCs stay on their floor)
-        if (Mathf.Abs(transform.position.y - startPosition.y) > 0.1f)
+        // Simple approach: keep NPCs at Y=1 (ground level)
+        if (transform.position.y != 1f)
         {
-            transform.position = new Vector3(transform.position.x, startPosition.y, transform.position.z);
+            transform.position = new Vector3(transform.position.x, 1f, transform.position.z);
         }
     }
 
@@ -270,12 +270,42 @@ public class NPCBehavior : NetworkBehaviour, IDamageable
 
     public void Panic()
     {
+        // Must be spawned to use RPCs
+        if (!IsSpawned)
+        {
+            // Not networked or not spawned yet - apply directly (single player mode)
+            ApplyPanic();
+            return;
+        }
+
+        // Server-authoritative panic - clients request via RPC
+        if (!IsServer)
+        {
+            PanicServerRpc();
+            return;
+        }
+
+        ApplyPanic();
+    }
+
+    [ServerRpc(RequireOwnership = false)]
+    private void PanicServerRpc()
+    {
+        ApplyPanic();
+    }
+
+    private void ApplyPanic()
+    {
         if (currentState != NPCState.Dead)
         {
             SetState(NPCState.Panicking);
 
-            // Play panic sound
-            if (AudioManager.Instance != null)
+            // Play panic sound (networked)
+            if (NetworkAudioManager.Instance != null)
+            {
+                NetworkAudioManager.Instance.PlayNPCPanic(transform.position);
+            }
+            else if (AudioManager.Instance != null)
             {
                 AudioManager.Instance.PlayNPCPanic(transform.position);
             }
@@ -283,6 +313,34 @@ public class NPCBehavior : NetworkBehaviour, IDamageable
     }
 
     public void TakeDamage(float amount)
+    {
+        // Must be spawned to use RPCs
+        if (!IsSpawned)
+        {
+            // Not networked or not spawned yet - apply damage directly (single player mode)
+            ApplyDamage(amount);
+            return;
+        }
+
+        // Server-authoritative damage - clients request damage via RPC
+        if (!IsServer)
+        {
+            // Client hit detection - request server to apply damage
+            TakeDamageServerRpc(amount);
+            return;
+        }
+
+        // Server processes damage
+        ApplyDamage(amount);
+    }
+
+    [ServerRpc(RequireOwnership = false)]
+    private void TakeDamageServerRpc(float amount)
+    {
+        ApplyDamage(amount);
+    }
+
+    private void ApplyDamage(float amount)
     {
         if (currentState == NPCState.Dead) return;
 
@@ -310,8 +368,12 @@ public class NPCBehavior : NetworkBehaviour, IDamageable
             BloodDecalManager.Instance.SpawnBloodDecal(transform.position);
         }
 
-        // Play death sound
-        if (AudioManager.Instance != null)
+        // Play death sound (networked)
+        if (NetworkAudioManager.Instance != null)
+        {
+            NetworkAudioManager.Instance.PlayNPCDeath(transform.position);
+        }
+        else if (AudioManager.Instance != null)
         {
             AudioManager.Instance.PlayNPCDeath(transform.position);
         }
@@ -328,7 +390,29 @@ public class NPCBehavior : NetworkBehaviour, IDamageable
             collider.enabled = false;
         }
 
-        Destroy(gameObject, 5f);
+        // Handle destruction based on network state
+        if (!IsSpawned)
+        {
+            // Single player or not networked - regular destroy
+            Destroy(gameObject, 5f);
+        }
+        else if (IsServer)
+        {
+            // Only server can destroy NetworkObjects
+            StartCoroutine(DespawnAfterDelay(5f));
+        }
+        // Client does nothing - server will despawn and sync to all clients
+    }
+
+    private System.Collections.IEnumerator DespawnAfterDelay(float delay)
+    {
+        yield return new WaitForSeconds(delay);
+
+        // Check if still valid and spawned
+        if (this != null && IsSpawned)
+        {
+            NetworkObject.Despawn();
+        }
     }
 
     public void SetAsAlien(bool alien)

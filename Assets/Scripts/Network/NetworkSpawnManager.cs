@@ -186,17 +186,17 @@ public class NetworkSpawnManager : MonoBehaviour
             Transform point = zone.npcSpawnPoints[index];
             if (point != null)
             {
-                return point.position;
+                // Use spawn point position but force Y=1 to be safe
+                return new Vector3(point.position.x, 1f, point.position.z);
             }
         }
 
-        // Fallback: random position within zone bounds
+        // Fallback: random position within zone bounds at Y=1
         Bounds bounds = zone.Bounds;
         float x = Random.Range(bounds.min.x + 2f, bounds.max.x - 2f);
         float z = Random.Range(bounds.min.z + 2f, bounds.max.z - 2f);
-        float y = bounds.center.y;
 
-        return new Vector3(x, y, z);
+        return new Vector3(x, 1f, z);
     }
 
     /// <summary>

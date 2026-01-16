@@ -354,4 +354,245 @@ public class NetworkedPlayer : NetworkBehaviour
         Debug.LogError($"[NetworkedPlayer] Clients CANNOT move with this setup!");
         Debug.LogError($"[NetworkedPlayer] Fix: On the prefab, REMOVE NetworkTransform and ADD OwnerNetworkTransform");
     }
+
+    // ==================== NETWORK AUDIO RPCs ====================
+    // These RPCs allow any client to broadcast sounds to all players.
+    // Call the ServerRpc from any client, server broadcasts via ClientRpc.
+
+    #region Audio RPCs
+
+    // --- Gunshots ---
+    [ServerRpc(RequireOwnership = false)]
+    public void PlayGunshotServerRpc(Vector3 position, bool isMinigun)
+    {
+        PlayGunshotClientRpc(position, isMinigun);
+    }
+
+    [ClientRpc]
+    private void PlayGunshotClientRpc(Vector3 position, bool isMinigun)
+    {
+        AudioManager.Instance?.PlayGunshot3D(position, isMinigun);
+    }
+
+    // --- Reload ---
+    [ServerRpc(RequireOwnership = false)]
+    public void PlayReloadServerRpc(Vector3 position)
+    {
+        PlayReloadClientRpc(position);
+    }
+
+    [ClientRpc]
+    private void PlayReloadClientRpc(Vector3 position)
+    {
+        AudioManager.Instance?.PlayReload();
+    }
+
+    // --- Bullet Impact ---
+    [ServerRpc(RequireOwnership = false)]
+    public void PlayBulletImpactServerRpc(string surfaceType, Vector3 position)
+    {
+        PlayBulletImpactClientRpc(surfaceType, position);
+    }
+
+    [ClientRpc]
+    private void PlayBulletImpactClientRpc(string surfaceType, Vector3 position)
+    {
+        AudioManager.Instance?.PlayBulletImpact(surfaceType, position);
+    }
+
+    // --- NPC Sounds ---
+    [ServerRpc(RequireOwnership = false)]
+    public void PlayNPCDeathServerRpc(Vector3 position)
+    {
+        PlayNPCDeathClientRpc(position);
+    }
+
+    [ClientRpc]
+    private void PlayNPCDeathClientRpc(Vector3 position)
+    {
+        AudioManager.Instance?.PlayNPCDeath(position);
+    }
+
+    [ServerRpc(RequireOwnership = false)]
+    public void PlayNPCPanicServerRpc(Vector3 position)
+    {
+        PlayNPCPanicClientRpc(position);
+    }
+
+    [ClientRpc]
+    private void PlayNPCPanicClientRpc(Vector3 position)
+    {
+        AudioManager.Instance?.PlayNPCPanic(position);
+    }
+
+    // --- Alien Sounds ---
+    [ServerRpc(RequireOwnership = false)]
+    public void PlayAlienRevealServerRpc()
+    {
+        PlayAlienRevealClientRpc();
+    }
+
+    [ClientRpc]
+    private void PlayAlienRevealClientRpc()
+    {
+        AudioManager.Instance?.PlayAlienReveal();
+    }
+
+    [ServerRpc(RequireOwnership = false)]
+    public void PlayAlienGrowlServerRpc(Vector3 position)
+    {
+        PlayAlienGrowlClientRpc(position);
+    }
+
+    [ClientRpc]
+    private void PlayAlienGrowlClientRpc(Vector3 position)
+    {
+        AudioManager.Instance?.PlayAlienGrowl(position);
+    }
+
+    [ServerRpc(RequireOwnership = false)]
+    public void PlayAlienAttackServerRpc(Vector3 position)
+    {
+        PlayAlienAttackClientRpc(position);
+    }
+
+    [ClientRpc]
+    private void PlayAlienAttackClientRpc(Vector3 position)
+    {
+        AudioManager.Instance?.PlayAlienAttack();
+    }
+
+    [ServerRpc(RequireOwnership = false)]
+    public void PlayAlienKilledServerRpc(Vector3 position)
+    {
+        PlayAlienKilledClientRpc(position);
+    }
+
+    [ClientRpc]
+    private void PlayAlienKilledClientRpc(Vector3 position)
+    {
+        AudioManager.Instance?.PlayAlienKilled();
+    }
+
+    // --- Interactable Sounds ---
+    [ServerRpc(RequireOwnership = false)]
+    public void PlayCoffeeMachineServerRpc(Vector3 position)
+    {
+        PlayCoffeeMachineClientRpc(position);
+    }
+
+    [ClientRpc]
+    private void PlayCoffeeMachineClientRpc(Vector3 position)
+    {
+        AudioManager.Instance?.PlayCoffeeMachine(position);
+    }
+
+    [ServerRpc(RequireOwnership = false)]
+    public void PlayAlarmTriggerServerRpc(Vector3 position)
+    {
+        PlayAlarmTriggerClientRpc(position);
+    }
+
+    [ClientRpc]
+    private void PlayAlarmTriggerClientRpc(Vector3 position)
+    {
+        AudioManager.Instance?.PlayAlarmTrigger(position);
+    }
+
+    [ServerRpc(RequireOwnership = false)]
+    public void PlayTerminalBeepServerRpc(Vector3 position)
+    {
+        PlayTerminalBeepClientRpc(position);
+    }
+
+    [ClientRpc]
+    private void PlayTerminalBeepClientRpc(Vector3 position)
+    {
+        AudioManager.Instance?.PlayTerminalBeep(position);
+    }
+
+    // --- Game Event Sounds ---
+    [ServerRpc(RequireOwnership = false)]
+    public void PlayPowerDownServerRpc()
+    {
+        PlayPowerDownClientRpc();
+    }
+
+    [ClientRpc]
+    private void PlayPowerDownClientRpc()
+    {
+        AudioManager.Instance?.PlayPowerDown();
+    }
+
+    [ServerRpc(RequireOwnership = false)]
+    public void PlayLightsEmergencyServerRpc()
+    {
+        PlayLightsEmergencyClientRpc();
+    }
+
+    [ClientRpc]
+    private void PlayLightsEmergencyClientRpc()
+    {
+        AudioManager.Instance?.PlayLightsEmergency();
+    }
+
+    // Victory/Defeat are server-only broadcasts
+    public void BroadcastVictory()
+    {
+        if (IsServer)
+        {
+            PlayVictoryClientRpc();
+        }
+    }
+
+    [ClientRpc]
+    private void PlayVictoryClientRpc()
+    {
+        AudioManager.Instance?.PlayVictory();
+    }
+
+    public void BroadcastDefeat()
+    {
+        if (IsServer)
+        {
+            PlayDefeatClientRpc();
+        }
+    }
+
+    [ClientRpc]
+    private void PlayDefeatClientRpc()
+    {
+        AudioManager.Instance?.PlayDefeat();
+    }
+
+    // --- Chaos Phase Ambient ---
+    public void BroadcastStartChaosAmbient()
+    {
+        if (IsServer)
+        {
+            StartChaosAmbientClientRpc();
+        }
+    }
+
+    [ClientRpc]
+    private void StartChaosAmbientClientRpc()
+    {
+        AudioManager.Instance?.StartChaosAmbient();
+    }
+
+    public void BroadcastStartNormalAmbient()
+    {
+        if (IsServer)
+        {
+            StartNormalAmbientClientRpc();
+        }
+    }
+
+    [ClientRpc]
+    private void StartNormalAmbientClientRpc()
+    {
+        AudioManager.Instance?.StartNormalAmbient();
+    }
+
+    #endregion
 }

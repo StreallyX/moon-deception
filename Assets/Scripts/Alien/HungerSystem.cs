@@ -216,9 +216,13 @@ public class HungerSystem : MonoBehaviour
 
     void PlayStarvingSound()
     {
-        if (AudioManager.Instance != null)
+        // Play alien growl sound when starving (networked)
+        if (NetworkAudioManager.Instance != null)
         {
-            // Play alien growl sound when starving
+            NetworkAudioManager.Instance.PlayAlienGrowl(transform.position);
+        }
+        else if (AudioManager.Instance != null)
+        {
             AudioManager.Instance.PlayAlienGrowl(transform.position);
         }
 

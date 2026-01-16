@@ -130,8 +130,13 @@ public class ChaosLightingController : MonoBehaviour
         isChaosMode = true;
         Debug.Log("[ChaosLightingController] Transitioning to chaos lighting...");
 
-        // Play alarm and power down sounds
-        if (AudioManager.Instance != null)
+        // Play alarm and power down sounds (networked)
+        if (NetworkAudioManager.Instance != null)
+        {
+            NetworkAudioManager.Instance.PlayPowerDown();
+            NetworkAudioManager.Instance.StartChaosAmbient();
+        }
+        else if (AudioManager.Instance != null)
         {
             AudioManager.Instance.PlayAlarm();
             AudioManager.Instance.PlayPowerDown();
@@ -177,8 +182,12 @@ public class ChaosLightingController : MonoBehaviour
         // Create emergency lights
         CreateEmergencyLights();
 
-        // Play emergency lights sound
-        if (AudioManager.Instance != null)
+        // Play emergency lights sound (networked)
+        if (NetworkAudioManager.Instance != null)
+        {
+            NetworkAudioManager.Instance.PlayLightsEmergency();
+        }
+        else if (AudioManager.Instance != null)
         {
             AudioManager.Instance.PlayLightsEmergency();
         }
@@ -252,8 +261,12 @@ public class ChaosLightingController : MonoBehaviour
         StopAllCoroutines();
         isChaosMode = false;
 
-        // Restore normal ambient sound
-        if (AudioManager.Instance != null)
+        // Restore normal ambient sound (networked)
+        if (NetworkAudioManager.Instance != null)
+        {
+            NetworkAudioManager.Instance.StartNormalAmbient();
+        }
+        else if (AudioManager.Instance != null)
         {
             AudioManager.Instance.StartNormalAmbient();
         }

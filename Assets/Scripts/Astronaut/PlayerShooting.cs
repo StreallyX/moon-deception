@@ -184,8 +184,12 @@ public class PlayerShooting : MonoBehaviour
 
         Debug.Log($"[PlayerShooting] Reloading {weaponName}...");
 
-        // Play reload sound
-        if (AudioManager.Instance != null)
+        // Play reload sound (networked - all players hear it)
+        if (NetworkAudioManager.Instance != null)
+        {
+            NetworkAudioManager.Instance.PlayReload(transform.position);
+        }
+        else if (AudioManager.Instance != null)
         {
             AudioManager.Instance.PlayReload();
         }
@@ -216,10 +220,15 @@ public class PlayerShooting : MonoBehaviour
             OnAmmoChanged?.Invoke(currentAmmo, magazineSize);
         }
 
-        if (AudioManager.Instance != null)
+        // Play gunshot sound (networked - all players hear it)
+        bool isMinigun = (weaponName == "MINIGUN");
+        if (NetworkAudioManager.Instance != null)
         {
-            // Use 3D spatial audio so aliens can hear gunshots with direction
-            AudioManager.Instance.PlayGunshot3D(transform.position);
+            NetworkAudioManager.Instance.PlayGunshot(transform.position, isMinigun);
+        }
+        else if (AudioManager.Instance != null)
+        {
+            AudioManager.Instance.PlayGunshot3D(transform.position, isMinigun);
         }
 
         if (enableCameraShake && CameraShake.Instance != null)
@@ -277,7 +286,12 @@ public class PlayerShooting : MonoBehaviour
                     ShowHitMarker(wasKill);
                 }
 
-                if (AudioManager.Instance != null)
+                // Play bullet impact sound (networked)
+                if (NetworkAudioManager.Instance != null)
+                {
+                    NetworkAudioManager.Instance.PlayBulletImpact("Flesh", hit.point);
+                }
+                else if (AudioManager.Instance != null)
                 {
                     AudioManager.Instance.PlayBulletImpact("Flesh", hit.point);
                 }
@@ -305,7 +319,12 @@ public class PlayerShooting : MonoBehaviour
             {
                 string surfaceType = GetSurfaceType(hit);
 
-                if (AudioManager.Instance != null)
+                // Play bullet impact sound (networked)
+                if (NetworkAudioManager.Instance != null)
+                {
+                    NetworkAudioManager.Instance.PlayBulletImpact(surfaceType, hit.point);
+                }
+                else if (AudioManager.Instance != null)
                 {
                     AudioManager.Instance.PlayBulletImpact(surfaceType, hit.point);
                 }

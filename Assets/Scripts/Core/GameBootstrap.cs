@@ -11,6 +11,7 @@ public class GameBootstrap : MonoBehaviour
     [Header("Auto-Create Managers")]
     public bool createGameLoader = true;
     public bool createAudioManager = true;
+    public bool createNetworkAudioManager = true;
     public bool createMenuManager = true;
     public bool createPostProcessController = true;
     public bool createChaosLightingController = true;
@@ -62,6 +63,15 @@ public class GameBootstrap : MonoBehaviour
             audioManagerObj.AddComponent<AudioManager>();
             DontDestroyOnLoad(audioManagerObj);
             Debug.Log("[GameBootstrap] Created AudioManager");
+        }
+
+        // Network Audio Manager (local singleton that delegates RPCs through NetworkedPlayer)
+        if (createNetworkAudioManager && NetworkAudioManager.Instance == null)
+        {
+            GameObject networkAudioObj = new GameObject("NetworkAudioManager");
+            networkAudioObj.AddComponent<NetworkAudioManager>();
+            DontDestroyOnLoad(networkAudioObj);
+            Debug.Log("[GameBootstrap] Created NetworkAudioManager");
         }
 
         // Menu Manager

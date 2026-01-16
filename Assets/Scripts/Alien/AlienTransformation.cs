@@ -140,8 +140,12 @@ public class AlienTransformation : MonoBehaviour
     {
         Debug.Log("[AlienTransformation] TRANSFORMING!");
 
-        // Play transformation sound
-        if (AudioManager.Instance != null)
+        // Play transformation sound (networked)
+        if (NetworkAudioManager.Instance != null)
+        {
+            NetworkAudioManager.Instance.PlayAlienReveal();
+        }
+        else if (AudioManager.Instance != null)
         {
             AudioManager.Instance.PlayAlienReveal();
         }
@@ -281,8 +285,12 @@ public class AlienTransformation : MonoBehaviour
     {
         attackTimer = attackCooldown;
 
-        // Play attack sound
-        if (AudioManager.Instance != null)
+        // Play attack sound (networked)
+        if (NetworkAudioManager.Instance != null)
+        {
+            NetworkAudioManager.Instance.PlayAlienAttack(transform.position);
+        }
+        else if (AudioManager.Instance != null)
         {
             AudioManager.Instance.PlayAlienAttack();
         }

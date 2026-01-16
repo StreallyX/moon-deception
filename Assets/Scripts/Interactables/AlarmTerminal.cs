@@ -146,9 +146,15 @@ public class AlarmTerminal : Interactable
 
         Debug.Log("[AlarmTerminal] ALARM TRIGGERED!");
 
-        // Play alarm trigger sound
-        if (AudioManager.Instance != null)
+        // Play alarm trigger sound (networked - all players hear it)
+        if (NetworkAudioManager.Instance != null)
         {
+            NetworkAudioManager.Instance.PlayTerminalBeep(transform.position);
+            NetworkAudioManager.Instance.PlayAlarmTrigger(transform.position);
+        }
+        else if (AudioManager.Instance != null)
+        {
+            // Fallback for single player
             AudioManager.Instance.PlayTerminalBeep(transform.position);
             AudioManager.Instance.PlayAlarmTrigger(transform.position);
         }

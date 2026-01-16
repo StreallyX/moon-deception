@@ -45,8 +45,12 @@ public class AlienHealth : MonoBehaviour, IDamageable
         OnHealthChanged?.Invoke(currentHealth);
         OnDamageTaken?.Invoke();
 
-        // Visual feedback
-        if (AudioManager.Instance != null)
+        // Visual feedback (networked audio)
+        if (NetworkAudioManager.Instance != null)
+        {
+            NetworkAudioManager.Instance.PlayBulletImpact("Flesh", transform.position);
+        }
+        else if (AudioManager.Instance != null)
         {
             AudioManager.Instance.PlayBulletImpact("Flesh", transform.position);
         }
@@ -120,8 +124,12 @@ public class AlienHealth : MonoBehaviour, IDamageable
             GameManager.Instance.OnAlienKilled?.Invoke(GameManager.Instance.AliensRemaining - 1);
         }
 
-        // Play death sound
-        if (AudioManager.Instance != null)
+        // Play death sound (networked)
+        if (NetworkAudioManager.Instance != null)
+        {
+            NetworkAudioManager.Instance.PlayAlienKilled(transform.position);
+        }
+        else if (AudioManager.Instance != null)
         {
             AudioManager.Instance.PlayAlienKilled();
         }

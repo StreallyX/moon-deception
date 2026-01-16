@@ -152,9 +152,14 @@ public class CoffeeMachine : Interactable
             steamParticles.Play();
         }
 
-        // Play coffee machine sound
-        if (AudioManager.Instance != null)
+        // Play coffee machine sound (networked - all players hear it)
+        if (NetworkAudioManager.Instance != null)
         {
+            NetworkAudioManager.Instance.PlayCoffeeMachine(transform.position);
+        }
+        else if (AudioManager.Instance != null)
+        {
+            // Fallback for single player
             AudioManager.Instance.PlayCoffeeMachine(transform.position);
         }
 
