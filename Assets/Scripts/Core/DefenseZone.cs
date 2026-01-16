@@ -149,21 +149,40 @@ public class DefenseZone : MonoBehaviour
             zoneRenderer = marker.GetComponent<MeshRenderer>();
         }
 
-        // Create material
-        zoneMaterial = new Material(Shader.Find("Standard"));
-        zoneMaterial.SetFloat("_Mode", 3); // Transparent
-        zoneMaterial.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
-        zoneMaterial.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
-        zoneMaterial.SetInt("_ZWrite", 0);
-        zoneMaterial.DisableKeyword("_ALPHATEST_ON");
-        zoneMaterial.EnableKeyword("_ALPHABLEND_ON");
-        zoneMaterial.DisableKeyword("_ALPHAPREMULTIPLY_ON");
-        zoneMaterial.renderQueue = 3000;
-        zoneMaterial.color = inactiveColor;
+        // Create material - try URP shader first, fallback to Sprites/Default
+        Shader shader = Shader.Find("Universal Render Pipeline/Lit");
+        if (shader == null) shader = Shader.Find("Sprites/Default");
+        if (shader == null) shader = Shader.Find("Standard");
 
+        zoneMaterial = new Material(shader);
+
+        // Configure for transparency
+        if (zoneMaterial.HasProperty("_Surface"))
+        {
+            // URP Lit shader
+            zoneMaterial.SetFloat("_Surface", 1); // Transparent
+            zoneMaterial.SetFloat("_Blend", 0); // Alpha
+            zoneMaterial.SetFloat("_AlphaClip", 0);
+            zoneMaterial.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+            zoneMaterial.renderQueue = 3000;
+        }
+        else
+        {
+            // Standard shader fallback
+            zoneMaterial.SetFloat("_Mode", 3); // Transparent
+            zoneMaterial.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
+            zoneMaterial.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+            zoneMaterial.SetInt("_ZWrite", 0);
+            zoneMaterial.DisableKeyword("_ALPHATEST_ON");
+            zoneMaterial.EnableKeyword("_ALPHABLEND_ON");
+            zoneMaterial.DisableKeyword("_ALPHAPREMULTIPLY_ON");
+            zoneMaterial.renderQueue = 3000;
+        }
+
+        zoneMaterial.color = inactiveColor;
         zoneRenderer.material = zoneMaterial;
 
-        // Create zone light if none
+        // Create zone light if none - make it BRIGHT for chaos visibility
         if (zoneLight == null)
         {
             GameObject lightObj = new GameObject("ZoneLight");
@@ -172,37 +191,50 @@ public class DefenseZone : MonoBehaviour
 
             zoneLight = lightObj.AddComponent<Light>();
             zoneLight.type = LightType.Point;
-            zoneLight.range = 10f;
+            zoneLight.range = 15f; // Larger range
             zoneLight.intensity = 0f;
             zoneLight.color = activeColor;
         }
+
+        Debug.Log($"[DefenseZone] Visual setup complete. Shader: {shader?.name ?? "NULL"}");
     }
 
     void Update()
     {
-        // Pulse effect when active
+        // Pulse effect when active - VERY bright during chaos
         if (isActive && !weaponCollected)
         {
             float pulse = Mathf.PingPong(Time.time * 2f, 1f);
+
             if (zoneMaterial != null)
             {
+                // Bright pulsing color - fully opaque for visibility
                 Color currentColor = Color.Lerp(activeColor, warningColor, pulse);
+                currentColor.a = 0.9f; // Almost fully opaque
                 zoneMaterial.color = currentColor;
+
+                // Add emission for URP
+                if (zoneMaterial.HasProperty("_EmissionColor"))
+                {
+                    zoneMaterial.EnableKeyword("_EMISSION");
+                    zoneMaterial.SetColor("_EmissionColor", currentColor * 2f);
+                }
             }
 
             if (zoneLight != null)
             {
-                zoneLight.intensity = 1f + pulse;
+                // VERY bright pulsing light (visible even in chaos darkness)
+                zoneLight.intensity = 3f + pulse * 2f;
             }
         }
 
-        // Check for weapon pickup
+        // Check for weapon pickup - ONLY if astronaut is in zone
         if (isActive && astronautInZone && !weaponCollected)
         {
-            // Show prompt
+            // Show prompt (only for astronaut - alien won't have astronautInZone=true)
             if (GameUIManager.Instance != null)
             {
-                GameUIManager.Instance.ShowInteractionPrompt("Press E to grab MACHINE GUN");
+                GameUIManager.Instance.ShowInteractionPrompt("Appuie sur E pour MINIGUN");
             }
 
             if (Input.GetKeyDown(KeyCode.E))
@@ -235,13 +267,23 @@ public class DefenseZone : MonoBehaviour
 
         if (zoneMaterial != null)
         {
-            zoneMaterial.color = activeColor;
+            // Set bright active color
+            Color brightActive = activeColor;
+            brightActive.a = 0.9f;
+            zoneMaterial.color = brightActive;
 
             // Force apply material to renderer
             if (zoneRenderer != null)
             {
                 zoneRenderer.material = zoneMaterial;
-                zoneRenderer.material.color = activeColor;
+                zoneRenderer.material.color = brightActive;
+            }
+
+            // Add emission for URP visibility
+            if (zoneMaterial.HasProperty("_EmissionColor"))
+            {
+                zoneMaterial.EnableKeyword("_EMISSION");
+                zoneMaterial.SetColor("_EmissionColor", activeColor * 2f);
             }
 
             Debug.Log($"[DefenseZone] Material color set to activeColor: {activeColor}");
@@ -249,7 +291,9 @@ public class DefenseZone : MonoBehaviour
 
         if (zoneLight != null)
         {
-            zoneLight.intensity = 2f;
+            // VERY bright for chaos visibility
+            zoneLight.intensity = 5f;
+            zoneLight.range = 20f;
             zoneLight.color = activeColor;
         }
 
@@ -328,7 +372,7 @@ public class DefenseZone : MonoBehaviour
 
         if (GameUIManager.Instance != null)
         {
-            GameUIManager.Instance.ShowInteractionPrompt("MACHINE GUN ACQUIRED!");
+            GameUIManager.Instance.ShowInteractionPrompt("MINIGUN OBTENU!");
         }
 
         yield return new WaitForSeconds(2f);
@@ -339,23 +383,64 @@ public class DefenseZone : MonoBehaviour
         }
     }
 
-    void OnTriggerEnter(Collider other)
+    /// <summary>
+    /// Check if the collider belongs to a LOCAL astronaut player (not alien, not remote player)
+    /// </summary>
+    bool IsLocalAstronaut(Collider other)
     {
-        // Check if astronaut entered - try multiple detection methods INCLUDING parent hierarchy
+        // FIRST: Check if it's an alien - if so, REJECT immediately
+        var alienController = other.GetComponent<AlienController>();
+        if (alienController == null) alienController = other.GetComponentInParent<AlienController>();
+        if (alienController != null)
+        {
+            // This is an alien, not an astronaut
+            return false;
+        }
+
+        // Check for NetworkedPlayer - most reliable in multiplayer
+        var networkedPlayer = other.GetComponentInParent<NetworkedPlayer>();
+        if (networkedPlayer != null)
+        {
+            // Must be: 1) astronaut role, 2) local owner
+            bool isAstro = networkedPlayer.isAstronaut && networkedPlayer.IsOwner;
+            if (isAstro)
+            {
+                Debug.Log($"[DefenseZone] Detected LOCAL astronaut via NetworkedPlayer");
+            }
+            return isAstro;
+        }
+
+        // Fallback for single player: check for astronaut components that are ENABLED
         var player = other.GetComponent<PlayerMovement>();
         if (player == null) player = other.GetComponentInParent<PlayerMovement>();
+        if (player != null && player.enabled)
+        {
+            Debug.Log($"[DefenseZone] Detected astronaut via PlayerMovement (single player)");
+            return true;
+        }
 
         var playerShooting = other.GetComponent<PlayerShooting>();
         if (playerShooting == null) playerShooting = other.GetComponentInParent<PlayerShooting>();
+        if (playerShooting != null && playerShooting.enabled)
+        {
+            Debug.Log($"[DefenseZone] Detected astronaut via PlayerShooting (single player)");
+            return true;
+        }
 
         var stressSystem = other.GetComponent<StressSystem>();
         if (stressSystem == null) stressSystem = other.GetComponentInParent<StressSystem>();
+        if (stressSystem != null && stressSystem.enabled)
+        {
+            Debug.Log($"[DefenseZone] Detected astronaut via StressSystem (single player)");
+            return true;
+        }
 
-        // Also check for NetworkedPlayer that is astronaut
-        var networkedPlayer = other.GetComponentInParent<NetworkedPlayer>();
-        bool isNetworkedAstronaut = (networkedPlayer != null && networkedPlayer.isAstronaut && networkedPlayer.IsOwner);
+        return false;
+    }
 
-        if (player != null || playerShooting != null || stressSystem != null || isNetworkedAstronaut)
+    void OnTriggerEnter(Collider other)
+    {
+        if (IsLocalAstronaut(other))
         {
             astronautInZone = true;
             Debug.Log($"[DefenseZone] Astronaut entered {zoneName} (isActive={isActive}, weaponCollected={weaponCollected})");
@@ -365,45 +450,24 @@ public class DefenseZone : MonoBehaviour
     void OnTriggerStay(Collider other)
     {
         // Backup detection in case OnTriggerEnter missed it
-        if (!astronautInZone)
+        if (!astronautInZone && IsLocalAstronaut(other))
         {
-            var player = other.GetComponent<PlayerMovement>();
-            if (player == null) player = other.GetComponentInParent<PlayerMovement>();
-
-            var playerShooting = other.GetComponent<PlayerShooting>();
-            if (playerShooting == null) playerShooting = other.GetComponentInParent<PlayerShooting>();
-
-            var networkedPlayer = other.GetComponentInParent<NetworkedPlayer>();
-            bool isNetworkedAstronaut = (networkedPlayer != null && networkedPlayer.isAstronaut && networkedPlayer.IsOwner);
-
-            if (player != null || playerShooting != null || isNetworkedAstronaut)
-            {
-                astronautInZone = true;
-                Debug.Log($"[DefenseZone] Astronaut detected via OnTriggerStay in {zoneName}");
-            }
+            astronautInZone = true;
+            Debug.Log($"[DefenseZone] Astronaut detected via OnTriggerStay in {zoneName}");
         }
     }
 
     void OnTriggerExit(Collider other)
     {
-        var player = other.GetComponent<PlayerMovement>();
-        if (player == null) player = other.GetComponentInParent<PlayerMovement>();
+        // Only reset if the exiting collider is an astronaut
+        if (!IsLocalAstronaut(other)) return;
 
-        var playerShooting = other.GetComponent<PlayerShooting>();
-        if (playerShooting == null) playerShooting = other.GetComponentInParent<PlayerShooting>();
+        astronautInZone = false;
+        Debug.Log($"[DefenseZone] Astronaut exited {zoneName}");
 
-        var networkedPlayer = other.GetComponentInParent<NetworkedPlayer>();
-        bool isNetworkedAstronaut = (networkedPlayer != null && networkedPlayer.isAstronaut && networkedPlayer.IsOwner);
-
-        if (player != null || playerShooting != null || isNetworkedAstronaut)
+        if (GameUIManager.Instance != null)
         {
-            astronautInZone = false;
-            Debug.Log($"[DefenseZone] Astronaut exited {zoneName}");
-
-            if (GameUIManager.Instance != null)
-            {
-                GameUIManager.Instance.HideInteractionPrompt();
-            }
+            GameUIManager.Instance.HideInteractionPrompt();
         }
     }
 
