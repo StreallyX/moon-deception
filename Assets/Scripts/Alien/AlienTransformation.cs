@@ -308,25 +308,29 @@ public class AlienTransformation : MonoBehaviour
             // Attack hit!
             Debug.Log("[AlienTransformation] ATTACK HIT!");
 
-            // Damage astronaut
-            var astronautHealth = astronautTransform.GetComponent<AstronautHealth>();
-            if (astronautHealth != null)
+            // Damage astronaut (networked)
+            if (NetworkAudioManager.Instance != null)
             {
-                astronautHealth.TakeDamage(attackDamage);
+                NetworkAudioManager.Instance.AlienAttackAstronaut(attackDamage);
+            }
+            else
+            {
+                // Local fallback
+                var astronautHealth = astronautTransform.GetComponent<AstronautHealth>();
+                if (astronautHealth != null)
+                {
+                    astronautHealth.TakeDamage(attackDamage);
+                }
+
+                // Also try IDamageable
+                var damageable = astronautTransform.GetComponent<IDamageable>();
+                if (damageable != null && astronautHealth == null)
+                {
+                    damageable.TakeDamage(attackDamage);
+                }
             }
 
-            // Also try IDamageable
-            var damageable = astronautTransform.GetComponent<IDamageable>();
-            if (damageable != null && astronautHealth == null)
-            {
-                damageable.TakeDamage(attackDamage);
-            }
-
-            // Visual feedback for hit
-            if (CameraShake.Instance != null)
-            {
-                CameraShake.Instance.ShakeImpact();
-            }
+            // Visual feedback for hit (camera shake is handled in TakeDamage)
         }
         else
         {

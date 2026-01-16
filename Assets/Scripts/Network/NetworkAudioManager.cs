@@ -457,6 +457,153 @@ public class NetworkAudioManager : MonoBehaviour
         }
     }
 
+    // ==================== STRESS/ABILITY EFFECTS ====================
+
+    /// <summary>
+    /// Apply stress to astronaut - used by alien abilities (networked)
+    /// </summary>
+    public void ApplyStressToAstronaut(float amount)
+    {
+        if (!ShouldSync())
+        {
+            // Single player - apply locally
+            StressSystem.Instance?.AddStress(amount);
+            return;
+        }
+
+        var player = FindAnyNetworkedPlayer();
+        if (player != null)
+        {
+            player.ApplyStressServerRpc(amount);
+        }
+        else
+        {
+            StressSystem.Instance?.AddStress(amount);
+        }
+    }
+
+    /// <summary>
+    /// Trigger camera shake on astronaut (networked)
+    /// </summary>
+    public void TriggerCameraShake(float duration, float magnitude)
+    {
+        if (!ShouldSync())
+        {
+            CameraShake.Instance?.Shake(duration, magnitude);
+            return;
+        }
+
+        var player = FindAnyNetworkedPlayer();
+        if (player != null)
+        {
+            player.TriggerCameraShakeServerRpc(duration, magnitude);
+        }
+        else
+        {
+            CameraShake.Instance?.Shake(duration, magnitude);
+        }
+    }
+
+    /// <summary>
+    /// Trigger visual glitch effect on astronaut (networked)
+    /// </summary>
+    public void TriggerGlitchEffect()
+    {
+        if (!ShouldSync())
+        {
+            PostProcessController.Instance?.TriggerDamageEffect();
+            return;
+        }
+
+        var player = FindAnyNetworkedPlayer();
+        if (player != null)
+        {
+            player.TriggerGlitchEffectServerRpc();
+        }
+        else
+        {
+            PostProcessController.Instance?.TriggerDamageEffect();
+        }
+    }
+
+    // ==================== CHAOS PHASE ====================
+
+    /// <summary>
+    /// Trigger chaos phase on all clients
+    /// </summary>
+    public void TriggerChaosPhase()
+    {
+        if (!ShouldSync())
+        {
+            GameManager.Instance?.TriggerChaosPhase();
+            return;
+        }
+
+        var player = FindAnyNetworkedPlayer();
+        if (player != null)
+        {
+            player.TriggerChaosPhaseServerRpc();
+        }
+        else
+        {
+            GameManager.Instance?.TriggerChaosPhase();
+        }
+    }
+
+    // ==================== COMBAT ====================
+
+    /// <summary>
+    /// Alien attacks astronaut - damage synced
+    /// </summary>
+    public void AlienAttackAstronaut(float damage)
+    {
+        if (!ShouldSync())
+        {
+            AstronautHealth.Instance?.TakeDamage(damage);
+            return;
+        }
+
+        var player = FindAnyNetworkedPlayer();
+        if (player != null)
+        {
+            player.AlienAttackAstronautServerRpc(damage);
+        }
+        else
+        {
+            AstronautHealth.Instance?.TakeDamage(damage);
+        }
+    }
+
+    // ==================== GAME END ====================
+
+    /// <summary>
+    /// End game - synced to all clients
+    /// </summary>
+    public void EndGame(bool alienWins)
+    {
+        if (!ShouldSync())
+        {
+            GameManager.WinCondition winner = alienWins ?
+                GameManager.WinCondition.AliensWin :
+                GameManager.WinCondition.AstronautWins;
+            GameManager.Instance?.EndGame(winner);
+            return;
+        }
+
+        var player = FindAnyNetworkedPlayer();
+        if (player != null)
+        {
+            player.EndGameServerRpc(alienWins);
+        }
+        else
+        {
+            GameManager.WinCondition winner = alienWins ?
+                GameManager.WinCondition.AliensWin :
+                GameManager.WinCondition.AstronautWins;
+            GameManager.Instance?.EndGame(winner);
+        }
+    }
+
     void OnDestroy()
     {
         if (Instance == this)

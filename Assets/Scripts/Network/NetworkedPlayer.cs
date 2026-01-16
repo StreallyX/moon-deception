@@ -614,4 +614,161 @@ public class NetworkedPlayer : NetworkBehaviour
     }
 
     #endregion
+
+    #region Stress/Ability RPCs
+
+    /// <summary>
+    /// Apply stress to astronaut - used by alien abilities
+    /// </summary>
+    [ServerRpc(RequireOwnership = false)]
+    public void ApplyStressServerRpc(float amount)
+    {
+        ApplyStressClientRpc(amount);
+    }
+
+    [ClientRpc]
+    private void ApplyStressClientRpc(float amount)
+    {
+        // Only apply to astronaut player
+        if (StressSystem.Instance != null)
+        {
+            StressSystem.Instance.AddStress(amount);
+        }
+    }
+
+    /// <summary>
+    /// Trigger camera shake on astronaut
+    /// </summary>
+    [ServerRpc(RequireOwnership = false)]
+    public void TriggerCameraShakeServerRpc(float duration, float magnitude)
+    {
+        TriggerCameraShakeClientRpc(duration, magnitude);
+    }
+
+    [ClientRpc]
+    private void TriggerCameraShakeClientRpc(float duration, float magnitude)
+    {
+        // Only shake for astronaut player
+        if (PlayerMovement.IsPlayerControlled && CameraShake.Instance != null)
+        {
+            CameraShake.Instance.Shake(duration, magnitude);
+        }
+    }
+
+    /// <summary>
+    /// Trigger visual glitch effect on astronaut
+    /// </summary>
+    [ServerRpc(RequireOwnership = false)]
+    public void TriggerGlitchEffectServerRpc()
+    {
+        TriggerGlitchEffectClientRpc();
+    }
+
+    [ClientRpc]
+    private void TriggerGlitchEffectClientRpc()
+    {
+        // Only affect astronaut player
+        if (PlayerMovement.IsPlayerControlled && PostProcessController.Instance != null)
+        {
+            PostProcessController.Instance.TriggerDamageEffect();
+        }
+    }
+
+    #endregion
+
+    #region Chaos Phase RPCs
+
+    /// <summary>
+    /// Trigger chaos phase on all clients
+    /// </summary>
+    [ServerRpc(RequireOwnership = false)]
+    public void TriggerChaosPhaseServerRpc()
+    {
+        TriggerChaosPhaseClientRpc();
+    }
+
+    [ClientRpc]
+    private void TriggerChaosPhaseClientRpc()
+    {
+        if (GameManager.Instance != null && GameManager.Instance.CurrentPhase != GameManager.GamePhase.Chaos)
+        {
+            GameManager.Instance.TriggerChaosPhase();
+        }
+    }
+
+    #endregion
+
+    #region Combat RPCs
+
+    /// <summary>
+    /// Alien attacks astronaut - damage synced
+    /// </summary>
+    [ServerRpc(RequireOwnership = false)]
+    public void AlienAttackAstronautServerRpc(float damage)
+    {
+        AlienAttackAstronautClientRpc(damage);
+    }
+
+    [ClientRpc]
+    private void AlienAttackAstronautClientRpc(float damage)
+    {
+        // Apply damage to local astronaut if controlled
+        if (AstronautHealth.Instance != null)
+        {
+            AstronautHealth.Instance.TakeDamage(damage);
+        }
+    }
+
+    /// <summary>
+    /// Astronaut shoots alien - damage synced
+    /// </summary>
+    [ServerRpc(RequireOwnership = false)]
+    public void AstronautShootAlienServerRpc(ulong alienNetworkId, float damage)
+    {
+        AstronautShootAlienClientRpc(alienNetworkId, damage);
+    }
+
+    [ClientRpc]
+    private void AstronautShootAlienClientRpc(ulong alienNetworkId, float damage)
+    {
+        // Find the alien by network ID and apply damage
+        if (NetworkManager.Singleton != null)
+        {
+            if (NetworkManager.Singleton.SpawnManager.SpawnedObjects.TryGetValue(alienNetworkId, out NetworkObject alienObj))
+            {
+                AlienHealth alienHealth = alienObj.GetComponent<AlienHealth>();
+                if (alienHealth != null)
+                {
+                    alienHealth.TakeDamage(damage);
+                }
+            }
+        }
+    }
+
+    #endregion
+
+    #region Game End RPCs
+
+    /// <summary>
+    /// End game - synced to all clients
+    /// </summary>
+    [ServerRpc(RequireOwnership = false)]
+    public void EndGameServerRpc(bool alienWins)
+    {
+        EndGameClientRpc(alienWins);
+    }
+
+    [ClientRpc]
+    private void EndGameClientRpc(bool alienWins)
+    {
+        if (GameManager.Instance != null)
+        {
+            GameManager.WinCondition winner = alienWins ?
+                GameManager.WinCondition.AliensWin :
+                GameManager.WinCondition.AstronautWins;
+            GameManager.Instance.EndGame(winner);
+        }
+    }
+
+    #endregion
 }

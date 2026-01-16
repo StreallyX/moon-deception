@@ -356,6 +356,25 @@ public class GameManager : MonoBehaviour
     }
 
     /// <summary>
+    /// End game - networked version (call from server to sync to all clients)
+    /// </summary>
+    public void EndGameNetworked(WinCondition winner)
+    {
+        if (currentPhase == GamePhase.Ended) return;
+
+        // Use networked end game if available
+        if (NetworkAudioManager.Instance != null)
+        {
+            bool alienWins = winner == WinCondition.AliensWin;
+            NetworkAudioManager.Instance.EndGame(alienWins);
+        }
+        else
+        {
+            EndGame(winner);
+        }
+    }
+
+    /// <summary>
     /// Reset game for new round
     /// </summary>
     public void ResetGame()

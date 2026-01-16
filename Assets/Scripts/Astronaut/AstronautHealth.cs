@@ -114,10 +114,10 @@ public class AstronautHealth : MonoBehaviour, IDamageable
 
         OnDeath?.Invoke();
 
-        // Notify game manager
+        // Notify game manager (networked)
         if (GameManager.Instance != null)
         {
-            GameManager.Instance.OnAstronautKilled();
+            GameManager.Instance.EndGameNetworked(GameManager.WinCondition.AliensWin);
         }
 
         // Disable player controls

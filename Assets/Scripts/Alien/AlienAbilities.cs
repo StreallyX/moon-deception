@@ -173,21 +173,45 @@ public class AlienAbilities : MonoBehaviour
     IEnumerator GlitchVisualEffect()
     {
         // Check if astronaut is in range
-        if (StressSystem.Instance == null) yield break;
+        Vector3 astronautPos = Vector3.zero;
+        bool foundAstronaut = false;
 
-        float dist = Vector3.Distance(transform.position, StressSystem.Instance.transform.position);
-        if (dist > glitchRange) yield break;
-
-        // Apply glitch via post-processing
-        if (PostProcessController.Instance != null)
+        if (StressSystem.Instance != null)
         {
-            PostProcessController.Instance.TriggerDamageEffect();
+            astronautPos = StressSystem.Instance.transform.position;
+            foundAstronaut = true;
+        }
+        else
+        {
+            var player = FindObjectOfType<PlayerMovement>();
+            if (player != null)
+            {
+                astronautPos = player.transform.position;
+                foundAstronaut = true;
+            }
         }
 
-        // Camera shake
-        if (CameraShake.Instance != null)
+        if (!foundAstronaut) yield break;
+
+        float dist = Vector3.Distance(transform.position, astronautPos);
+        if (dist > glitchRange) yield break;
+
+        // Apply glitch via post-processing (networked)
+        if (NetworkAudioManager.Instance != null)
         {
-            CameraShake.Instance.Shake(0.3f, 0.05f);
+            NetworkAudioManager.Instance.TriggerGlitchEffect();
+            NetworkAudioManager.Instance.TriggerCameraShake(0.3f, 0.05f);
+        }
+        else
+        {
+            if (PostProcessController.Instance != null)
+            {
+                PostProcessController.Instance.TriggerDamageEffect();
+            }
+            if (CameraShake.Instance != null)
+            {
+                CameraShake.Instance.Shake(0.3f, 0.05f);
+            }
         }
 
         yield return null;
@@ -319,14 +343,44 @@ public class AlienAbilities : MonoBehaviour
     // ==================== HELPER ====================
     void ApplyStressToAstronaut(float range, float stressAmount)
     {
-        if (StressSystem.Instance == null) return;
+        // Try to find astronaut position for distance check
+        Vector3 astronautPos = Vector3.zero;
+        bool foundAstronaut = false;
 
-        float dist = Vector3.Distance(transform.position, StressSystem.Instance.transform.position);
+        if (StressSystem.Instance != null)
+        {
+            astronautPos = StressSystem.Instance.transform.position;
+            foundAstronaut = true;
+        }
+        else
+        {
+            // Try to find via PlayerMovement
+            var player = FindObjectOfType<PlayerMovement>();
+            if (player != null)
+            {
+                astronautPos = player.transform.position;
+                foundAstronaut = true;
+            }
+        }
+
+        if (!foundAstronaut) return;
+
+        float dist = Vector3.Distance(transform.position, astronautPos);
         if (dist <= range)
         {
             // Stress decreases with distance
             float stressMultiplier = 1f - (dist / range) * 0.5f;
-            StressSystem.Instance.AddStress(stressAmount * stressMultiplier);
+            float finalStress = stressAmount * stressMultiplier;
+
+            // Use networked stress application
+            if (NetworkAudioManager.Instance != null)
+            {
+                NetworkAudioManager.Instance.ApplyStressToAstronaut(finalStress);
+            }
+            else if (StressSystem.Instance != null)
+            {
+                StressSystem.Instance.AddStress(finalStress);
+            }
 
             // Notify game manager
             if (GameManager.Instance != null)

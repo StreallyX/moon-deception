@@ -182,33 +182,96 @@ public class MenuManager : MonoBehaviour
                 Destroy(child.gameObject);
         }
 
-        // Title
-        string title = victory ? "VICTORY" : "GAME OVER";
-        Color titleColor = victory ? new Color(0.3f, 0.9f, 0.3f) : accentColor;
+        // Determine who the local player was
+        bool wasAstronaut = PlayerMovement.IsPlayerControlled ||
+                           (PlayerMovement.ActivePlayer != null && PlayerMovement.ActivePlayer.enabled);
+        bool wasAlien = AlienController.IsAlienControlled;
+
+        // Calculate personal victory
+        bool personalVictory = false;
+        string title = "";
+        string subtitle = "";
+        Color titleColor;
+
+        if (victory) // Astronaut wins (aliens eliminated)
+        {
+            if (wasAstronaut)
+            {
+                personalVictory = true;
+                title = "VICTOIRE!";
+                subtitle = "Bravo! Tu as éliminé tous les aliens!";
+            }
+            else if (wasAlien)
+            {
+                personalVictory = false;
+                title = "DÉFAITE...";
+                subtitle = "L'astronaute t'a démasqué et éliminé!";
+            }
+        }
+        else // Aliens win (astronaut killed or time up)
+        {
+            if (wasAlien)
+            {
+                personalVictory = true;
+                title = "VICTOIRE!";
+                subtitle = "Bravo! L'astronaute n'a pas survécu!";
+            }
+            else if (wasAstronaut)
+            {
+                personalVictory = false;
+                title = "DÉFAITE...";
+                subtitle = "Les aliens t'ont eu...";
+            }
+        }
+
+        // Fallback if neither was controlled (spectator?)
+        if (string.IsNullOrEmpty(title))
+        {
+            title = victory ? "ASTRONAUTE GAGNE" : "ALIENS GAGNENT";
+            subtitle = victory ? "Tous les aliens éliminés!" : "L'astronaute est mort!";
+            personalVictory = victory;
+        }
+
+        titleColor = personalVictory ? new Color(0.3f, 0.9f, 0.3f) : accentColor;
         var titleText = CreateText(gameOverPanel.transform, title, 72, new Vector2(0, 200), FontStyle.Bold);
         titleText.color = titleColor;
 
-        // Subtitle
-        string subtitle = victory ? "All aliens eliminated!" : "You have been defeated...";
         CreateText(gameOverPanel.transform, subtitle, 28, new Vector2(0, 120), FontStyle.Italic);
 
         // Stats
-        CreateText(gameOverPanel.transform, "STATISTICS", 24, new Vector2(0, 40), FontStyle.Bold);
+        CreateText(gameOverPanel.transform, "STATISTIQUES", 24, new Vector2(0, 40), FontStyle.Bold);
 
         int minutes = Mathf.FloorToInt(timePlayed / 60f);
         int seconds = Mathf.FloorToInt(timePlayed % 60f);
-        CreateText(gameOverPanel.transform, $"Time: {minutes:00}:{seconds:00}", 20, new Vector2(0, 0), FontStyle.Normal);
-        CreateText(gameOverPanel.transform, $"Aliens Killed: {aliensKilled}", 20, new Vector2(0, -30), FontStyle.Normal);
-        CreateText(gameOverPanel.transform, $"Innocents Killed: {innocentsKilled}", 20, new Vector2(0, -60), FontStyle.Normal);
+        CreateText(gameOverPanel.transform, $"Temps: {minutes:00}:{seconds:00}", 20, new Vector2(0, 0), FontStyle.Normal);
+        CreateText(gameOverPanel.transform, $"Aliens Éliminés: {aliensKilled}", 20, new Vector2(0, -30), FontStyle.Normal);
+        CreateText(gameOverPanel.transform, $"Innocents Tués: {innocentsKilled}", 20, new Vector2(0, -60), FontStyle.Normal);
 
-        // Buttons
-        CreateButton(gameOverPanel.transform, "PLAY AGAIN", new Vector2(0, -150), () => RestartGame());
-        CreateButton(gameOverPanel.transform, "MAIN MENU", new Vector2(0, -230), () => ReturnToMainMenu());
+        // Buttons - different based on connection type
+        bool isSteamLobby = IsSteamLobbyGame();
+        bool isTestMode = IsTestModeGame();
 
-        // Play sound
-        if (AudioManager.Instance != null)
+        if (isSteamLobby)
         {
-            if (victory)
+            CreateButton(gameOverPanel.transform, "RETOUR AU LOBBY", new Vector2(0, -150), () => ReturnToSteamLobby());
+        }
+        else
+        {
+            CreateButton(gameOverPanel.transform, "REJOUER", new Vector2(0, -150), () => RestartGame());
+            CreateButton(gameOverPanel.transform, "MENU PRINCIPAL", new Vector2(0, -230), () => ReturnToMainMenu());
+        }
+
+        // Play sound (networked)
+        if (NetworkAudioManager.Instance != null)
+        {
+            if (personalVictory)
+                NetworkAudioManager.Instance.PlayVictory();
+            else
+                NetworkAudioManager.Instance.PlayDefeat();
+        }
+        else if (AudioManager.Instance != null)
+        {
+            if (personalVictory)
                 AudioManager.Instance.PlayVictory();
             else
                 AudioManager.Instance.PlayDefeat();
@@ -218,6 +281,45 @@ public class MenuManager : MonoBehaviour
         Cursor.lockState = CursorLockMode.None;
         Cursor.visible = true;
         Time.timeScale = 0f;
+    }
+
+    /// <summary>
+    /// Check if this is a Steam lobby game
+    /// </summary>
+    private bool IsSteamLobbyGame()
+    {
+        // TODO: Check Steamworks integration
+        // For now, return false (not implemented yet)
+        return false;
+    }
+
+    /// <summary>
+    /// Check if this is a test mode game (H/J keys)
+    /// </summary>
+    private bool IsTestModeGame()
+    {
+        // Check if NetworkManager exists and how we connected
+        if (Unity.Netcode.NetworkManager.Singleton != null &&
+            Unity.Netcode.NetworkManager.Singleton.IsConnectedClient)
+        {
+            // If connected via NetworkManager, it's likely test mode (H/J)
+            return true;
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// Return to Steam lobby with same players
+    /// </summary>
+    public void ReturnToSteamLobby()
+    {
+        Time.timeScale = 1f;
+        isPaused = false;
+
+        // TODO: Implement Steam lobby return
+        // For now, just go to main menu
+        Debug.Log("[MenuManager] Steam lobby return not implemented yet - going to main menu");
+        ReturnToMainMenu();
     }
 
     // ==================== UI CREATION HELPERS ====================
@@ -491,6 +593,14 @@ public class MenuManager : MonoBehaviour
     {
         Time.timeScale = 1f;
         isPaused = false;
+
+        // Disconnect from network if connected
+        if (Unity.Netcode.NetworkManager.Singleton != null &&
+            Unity.Netcode.NetworkManager.Singleton.IsConnectedClient)
+        {
+            Debug.Log("[MenuManager] Disconnecting from network...");
+            Unity.Netcode.NetworkManager.Singleton.Shutdown();
+        }
 
         // Reset game
         if (GameManager.Instance != null)

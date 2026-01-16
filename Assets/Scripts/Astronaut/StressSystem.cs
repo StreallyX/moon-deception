@@ -6,6 +6,7 @@ using UnityEngine.Events;
 /// Manages the astronaut's stress level.
 /// Stress increases when killing innocents or witnessing chaos.
 /// Stress decreases when killing aliens or staying calm.
+/// Includes visual/audio effects (heartbeat, screen darkening).
 /// </summary>
 public class StressSystem : MonoBehaviour, IDamageable
 {
@@ -21,6 +22,12 @@ public class StressSystem : MonoBehaviour, IDamageable
     [SerializeField] private float chaosEventStress = 10f;
     [SerializeField] private float witnessDeathStress = 5f;
 
+    [Header("Stress Effects")]
+    [SerializeField] private float heartbeatStartPercent = 0.5f; // Start heartbeat at 50% stress
+    [SerializeField] private float heartbeatMinInterval = 1.2f;  // Slow heartbeat
+    [SerializeField] private float heartbeatMaxInterval = 0.4f;  // Fast heartbeat at max stress
+    [SerializeField] private float screenShakeStartPercent = 0.7f; // Start shaking at 70%
+
     [Header("UI Reference")]
     [SerializeField] private Slider stressSlider;
     [SerializeField] private Image stressBarFill;
@@ -32,6 +39,8 @@ public class StressSystem : MonoBehaviour, IDamageable
 
     private float lastStressTime;
     private bool isMaxed = false;
+    private float heartbeatTimer = 0f;
+    private AudioSource heartbeatSource;
 
     public static StressSystem Instance { get; private set; }
 
@@ -154,6 +163,72 @@ public class StressSystem : MonoBehaviour, IDamageable
     void Update()
     {
         HandlePassiveRecovery();
+        HandleStressEffects();
+    }
+
+    /// <summary>
+    /// Handle heartbeat sound and screen effects based on stress level
+    /// </summary>
+    private void HandleStressEffects()
+    {
+        if (isMaxed) return; // Chaos mode has its own effects
+
+        float stressPercent = StressPercent;
+
+        // Heartbeat sound when stress is high
+        if (stressPercent >= heartbeatStartPercent)
+        {
+            heartbeatTimer -= Time.deltaTime;
+
+            if (heartbeatTimer <= 0f)
+            {
+                PlayHeartbeat();
+
+                // Calculate interval based on stress (faster as stress increases)
+                float t = (stressPercent - heartbeatStartPercent) / (1f - heartbeatStartPercent);
+                float interval = Mathf.Lerp(heartbeatMinInterval, heartbeatMaxInterval, t);
+                heartbeatTimer = interval;
+            }
+        }
+        else
+        {
+            heartbeatTimer = 0f; // Reset when stress drops
+        }
+
+        // Screen shake at very high stress
+        if (stressPercent >= screenShakeStartPercent && CameraShake.Instance != null)
+        {
+            float shakeIntensity = (stressPercent - screenShakeStartPercent) / (1f - screenShakeStartPercent);
+            // Very subtle constant shake
+            if (Random.value < 0.05f) // 5% chance per frame
+            {
+                CameraShake.Instance.Shake(0.1f, 0.01f * shakeIntensity);
+            }
+        }
+    }
+
+    private void PlayHeartbeat()
+    {
+        // Play heartbeat sound
+        if (AudioManager.Instance != null && AudioManager.Instance.heartbeatLoop != null)
+        {
+            // Create or reuse audio source for heartbeat
+            if (heartbeatSource == null)
+            {
+                GameObject heartbeatObj = new GameObject("HeartbeatSource");
+                heartbeatObj.transform.SetParent(transform);
+                heartbeatSource = heartbeatObj.AddComponent<AudioSource>();
+                heartbeatSource.spatialBlend = 0f; // 2D sound
+                heartbeatSource.loop = false;
+            }
+
+            // Adjust volume based on stress
+            float volume = 0.3f + (StressPercent * 0.5f);
+            heartbeatSource.volume = volume;
+            heartbeatSource.pitch = 0.9f + (StressPercent * 0.3f); // Slightly faster pitch at high stress
+            heartbeatSource.clip = AudioManager.Instance.heartbeatLoop;
+            heartbeatSource.Play();
+        }
     }
 
     private void HandlePassiveRecovery()
@@ -225,7 +300,16 @@ public class StressSystem : MonoBehaviour, IDamageable
     {
         isMaxed = true;
         Debug.Log("[StressSystem] STRESS MAXED! Triggering chaos phase!");
-        OnStressMaxed?.Invoke();
+
+        // Use networked chaos phase trigger if available
+        if (NetworkAudioManager.Instance != null)
+        {
+            NetworkAudioManager.Instance.TriggerChaosPhase();
+        }
+        else
+        {
+            OnStressMaxed?.Invoke();
+        }
     }
 
     public void ResetStress()

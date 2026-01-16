@@ -116,14 +116,6 @@ public class AlienHealth : MonoBehaviour, IDamageable
             Debug.Log($"[AlienHealth] Astronaut stress reduced by {stressReductionOnKill}");
         }
 
-        // Notify game manager
-        if (GameManager.Instance != null)
-        {
-            // Create a fake NPCBehavior-like notification
-            // The alien counts as an alien kill
-            GameManager.Instance.OnAlienKilled?.Invoke(GameManager.Instance.AliensRemaining - 1);
-        }
-
         // Play death sound (networked)
         if (NetworkAudioManager.Instance != null)
         {
@@ -132,6 +124,27 @@ public class AlienHealth : MonoBehaviour, IDamageable
         else if (AudioManager.Instance != null)
         {
             AudioManager.Instance.PlayAlienKilled();
+        }
+
+        // Check if all aliens are dead - astronaut wins!
+        // Count remaining alive aliens
+        int aliveAliens = 0;
+        AlienHealth[] allAliens = FindObjectsOfType<AlienHealth>();
+        foreach (var alien in allAliens)
+        {
+            if (!alien.IsDead)
+            {
+                aliveAliens++;
+            }
+        }
+
+        Debug.Log($"[AlienHealth] Remaining aliens: {aliveAliens}");
+
+        // If no aliens left, astronaut wins!
+        if (aliveAliens == 0 && GameManager.Instance != null)
+        {
+            Debug.Log("[AlienHealth] All aliens eliminated! Astronaut wins!");
+            GameManager.Instance.EndGameNetworked(GameManager.WinCondition.AstronautWins);
         }
 
         // Disable alien controls
