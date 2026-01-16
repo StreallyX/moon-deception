@@ -1,4 +1,5 @@
 using UnityEngine;
+using Unity.Netcode;
 
 /// <summary>
 /// Bootstrap script that initializes all game systems.
@@ -14,6 +15,7 @@ public class GameBootstrap : MonoBehaviour
     public bool createChaosLightingController = true;
     public bool createMapManager = true;
     public bool createSpawnManager = true;
+    public bool createNetworkManager = true;
 
     [Header("Player Setup")]
     public bool addCameraShakeToPlayer = true;
@@ -91,6 +93,18 @@ public class GameBootstrap : MonoBehaviour
             spawnManagerObj.AddComponent<SpawnManager>();
             DontDestroyOnLoad(spawnManagerObj);
             Debug.Log("[GameBootstrap] Created SpawnManager");
+        }
+
+        // Network Manager
+        if (createNetworkManager && NetworkManager.Singleton == null)
+        {
+            GameObject networkManagerObj = new GameObject("NetworkManager");
+            networkManagerObj.AddComponent<NetworkManager>();
+            networkManagerObj.AddComponent<Unity.Netcode.Transports.UTP.UnityTransport>();
+            networkManagerObj.AddComponent<NetworkManagerSetup>();
+            networkManagerObj.AddComponent<NetworkConnectionUI>();
+            DontDestroyOnLoad(networkManagerObj);
+            Debug.Log("[GameBootstrap] Created NetworkManager");
         }
 
         // Add CameraShake to player camera

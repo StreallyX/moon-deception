@@ -1,8 +1,8 @@
 # Moon Deception - Development Tracker
 
-## Current Phase: 3 - COMPLETE
+## Current Phase: 4.1 - Multiplayer Setup - IN PROGRESS
 ## Current Branch: phase1-fps
-## Next: Phase 4 - Multiplayer (Netcode for GameObjects)
+## Status: Waiting for user to install Netcode package
 
 ---
 
@@ -83,12 +83,47 @@
 
 ---
 
-## Phase 4 Checklist: Multiplayer
-- [ ] Unity Netcode for GameObjects setup
-- [ ] NetworkManager - Host/Client connection
-- [ ] Role assignment (1 astronaut, rest aliens)
-- [ ] Synchronized movement, shooting, NPCs
-- [ ] Lobby system
+## Phase 4 Checklist: Multiplayer (Netcode for GameObjects)
+
+### Phase 4.1: Setup & Base - TODO
+- [ ] Install Netcode for GameObjects package
+- [ ] Create NetworkManager prefab
+- [ ] Create basic connection UI (Host/Join)
+- [ ] Test: 2 Unity instances can connect
+
+### Phase 4.2: Player Sync - TODO
+- [ ] NetworkObject on Player & Alien prefabs
+- [ ] Sync position/rotation (ClientNetworkTransform)
+- [ ] Sync shooting (ServerRpc)
+- [ ] Sync animations
+- [ ] Test: See other player move
+
+### Phase 4.3: NPC Sync - TODO
+- [ ] NPCs spawned by server only
+- [ ] NPC state synced (NetworkVariable)
+- [ ] NPC damage synced (ServerRpc)
+- [ ] Test: Both players see same NPCs
+
+### Phase 4.4: Game State Sync - TODO
+- [ ] GameManager → NetworkBehaviour
+- [ ] Sync game phase (NetworkVariable)
+- [ ] Sync timers, stress, scores
+- [ ] Sync win/lose conditions
+- [ ] Test: Chaos triggers for everyone
+
+### Phase 4.5: Role Assignment - TODO
+- [ ] Server assigns roles on connect
+- [ ] 1 Astronaut (first player or random)
+- [ ] Others = Aliens among NPCs
+- [ ] Spawn at correct positions
+- [ ] Test: 2+ players get different roles
+
+### Phase 4.6: Lobby System - TODO
+- [ ] Lobby UI (Create/Join/Ready)
+- [ ] Player list display
+- [ ] Ready check before start
+- [ ] Disconnect handling
+- [ ] Test: Full game flow with 2+ players
 
 ---
 
@@ -177,16 +212,31 @@
   - NPCBehavior.Panic() now uses PlayNPCPanic()
   - NPCBehavior.Die() now uses PlayNPCDeath()
 - **Coffee Mechanic Rework**:
-  - Coffee no longer restores hunger
-  - Coffee INCREASES hunger decay rate (strategic risk!)
-  - Stacks: each coffee adds +0.5x to decay multiplier (max 5x)
+  - Coffee restores +25 hunger immediately
+  - BUT increases hunger decay rate (stacks!)
+  - Each coffee adds +0.5x to decay multiplier (max 5x)
   - Stacks expire after 15s each
   - UI shows coffee stacks and decay multiplier
+  - Double-edged sword: gain now, lose faster later
 - **Unity Scene Setup** - User completed:
   - 4 zones created with MapZone component and BoxCollider
   - Spawn points created in each zone
   - All interactables tested and working
+- **NPC Bug Fix**:
+  - Fixed NPCs sinking into ground
+  - Added Y-position lock in ApplyGravity()
 - **PHASE 3 COMPLETE** - Ready for Phase 4 Multiplayer
+
+### Session 7 (2026-01-16) - PHASE 4 START
+- **Phase 4.1: Multiplayer Setup** - IN PROGRESS
+  - Created NetworkManagerSetup.cs - Configures NetworkManager
+  - Created NetworkConnectionUI.cs - Host/Join UI (H/J keys, F1 toggle)
+  - Updated GameBootstrap.cs - Auto-creates NetworkManager
+  - **WAITING**: User needs to install Netcode for GameObjects package
+- **Next Steps**:
+  1. User installs package: com.unity.netcode.gameobjects
+  2. Test Host/Join with 2 Unity instances
+  3. Then Phase 4.2: Player Sync
 
 ---
 
@@ -223,15 +273,17 @@ Assets/Scripts/
 ├── Core/
 │   ├── GameManager.cs       ✅ + SpawnManager integration
 │   ├── GameController.cs    ✅ TAB switch
-│   ├── GameBootstrap.cs     ✅ + MapManager, SpawnManager
-│   ├── MapManager.cs        ✅ NEW - Zone management
-│   ├── SpawnManager.cs      ✅ NEW - Spawning with rules
+│   ├── GameBootstrap.cs     ✅ + NetworkManager auto-create
+│   ├── MapManager.cs        ✅ Zone management
+│   ├── SpawnManager.cs      ✅ Spawning with rules
 │   ├── AudioManager.cs      ✅ Central audio with pooling
 │   ├── CameraShake.cs       ✅ Shoot/impact/stress shake
 │   ├── PostProcessController.cs ✅ Dynamic URP effects
 │   ├── ChaosLightingController.cs ✅ Blackout + emergency lights
-│   ├── DefenseZone.cs       ✅ Weapon upgrade zones
-│   └── NetworkManager.cs    📋 Phase 4
+│   └── DefenseZone.cs       ✅ Weapon upgrade zones
+├── Network/
+│   ├── NetworkManagerSetup.cs  ✅ NEW - NetworkManager config
+│   └── NetworkConnectionUI.cs  ✅ NEW - Host/Join UI (H/J/F1)
 ├── UI/
 │   ├── GameUIManager.cs     ✅ HUD bars
 │   ├── MenuManager.cs       ✅ All menus (Main, Pause, Settings, GameOver)

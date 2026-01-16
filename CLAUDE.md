@@ -199,6 +199,9 @@ Assets/Scripts/
 │   ├── PostProcessController.cs
 │   ├── ChaosLightingController.cs
 │   └── DefenseZone.cs
+├── Network/
+│   ├── NetworkManagerSetup.cs
+│   └── NetworkConnectionUI.cs
 └── UI/
     ├── GameUIManager.cs
     ├── MenuManager.cs
@@ -211,8 +214,26 @@ Track in `DEV_TRACKER.md`:
 - **Phase 1**: Solo Astronaut FPS ✅
 - **Phase 2**: Solo Alien TPS ✅
 - **Phase 3**: Map & Gameplay Loop ✅
-- **Phase 4**: Multiplayer - Netcode for GameObjects (NEXT)
+- **Phase 4**: Multiplayer - Netcode for GameObjects (IN PROGRESS)
+  - 4.1: Setup & Base - Scripts ready, needs package install
+  - 4.2-4.6: TODO
 - **Phase 5**: Steam Integration - Steamworks.NET (TODO)
+
+## Network System (Phase 4)
+
+### Setup
+Package: `com.unity.netcode.gameobjects`
+
+### Debug Keys
+| Key | Action |
+|-----|--------|
+| H | Host game (quick) |
+| J | Join game (quick) |
+| F1 | Toggle connection UI |
+
+### Network Scripts
+- `NetworkManagerSetup.cs` - Configures NetworkManager and transport
+- `NetworkConnectionUI.cs` - OnGUI for Host/Join, IP input
 
 ## Known Patterns
 
