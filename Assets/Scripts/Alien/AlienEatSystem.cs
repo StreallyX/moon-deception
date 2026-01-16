@@ -1,8 +1,10 @@
 using UnityEngine;
+using Unity.Netcode;
 
 /// <summary>
 /// Handles alien eating mechanics - detecting and consuming NPCs/other aliens.
 /// Raycast originates from ALIEN's position (eye level), NOT from camera.
+/// SERVER-AUTHORITATIVE: Eating destroys NetworkObjects via Despawn().
 /// </summary>
 public class AlienEatSystem : MonoBehaviour
 {
@@ -55,6 +57,27 @@ public class AlienEatSystem : MonoBehaviour
     
     void Update()
     {
+        // Only detect and highlight when alien is being controlled locally
+        if (!AlienController.IsAlienControlled)
+        {
+            // Clear any existing highlight when not controlled
+            if (currentTarget != null)
+            {
+                if (currentHighlight != null)
+                {
+                    currentHighlight.RemoveHighlight();
+                }
+                currentTarget = null;
+                currentHighlight = null;
+
+                if (eatPromptUI != null)
+                {
+                    eatPromptUI.SetVisible(false);
+                }
+            }
+            return;
+        }
+
         DetectEdibleTarget();
         HandleInput();
     }
@@ -206,7 +229,16 @@ public class AlienEatSystem : MonoBehaviour
             hungerSystem.Eat();
         }
         
-        if (bloodDecalPrefab != null)
+        // Spawn blood decal (networked)
+        if (NetworkAudioManager.Instance != null)
+        {
+            NetworkAudioManager.Instance.SpawnBloodDecal(targetPosition);
+        }
+        else if (BloodDecalManager.Instance != null)
+        {
+            BloodDecalManager.Instance.SpawnBloodDecal(targetPosition);
+        }
+        else if (bloodDecalPrefab != null)
         {
             Instantiate(bloodDecalPrefab, targetPosition, Quaternion.identity);
         }
@@ -223,16 +255,48 @@ public class AlienEatSystem : MonoBehaviour
                 gm.OnNPCKilled(npc);
             }
         }
-        
+
         currentTarget = null;
         currentHighlight = null;
-        
+
         if (eatPromptUI != null)
         {
             eatPromptUI.SetVisible(false);
         }
-        
-        Destroy(target);
+
+        // Handle network destruction properly
+        NetworkObject netObj = target.GetComponent<NetworkObject>();
+        if (netObj != null && netObj.IsSpawned)
+        {
+            // NetworkObject - must be despawned by server
+            if (NetworkManager.Singleton != null && NetworkManager.Singleton.IsServer)
+            {
+                // We are server - despawn immediately
+                netObj.Despawn();
+                Debug.Log($"[AlienEatSystem] Server despawned NetworkObject: {target.name}");
+            }
+            else if (NetworkManager.Singleton != null)
+            {
+                // We are client - request server to despawn via NPCBehavior
+                NPCBehavior npcBehavior = target.GetComponent<NPCBehavior>();
+                if (npcBehavior != null)
+                {
+                    // Use the damage system to kill the NPC (server-authoritative)
+                    npcBehavior.TakeDamage(9999f);
+                    Debug.Log($"[AlienEatSystem] Client requested server to kill: {target.name}");
+                }
+                else
+                {
+                    Debug.LogWarning($"[AlienEatSystem] Cannot despawn {target.name} - no NPCBehavior and not server");
+                }
+            }
+        }
+        else
+        {
+            // Not a NetworkObject or not spawned - regular destroy (single player)
+            Destroy(target);
+            Debug.Log($"[AlienEatSystem] Destroyed non-networked: {target.name}");
+        }
     }
     
     void CreateBloodPlaceholder(Vector3 position)

@@ -37,6 +37,30 @@ public class NPCBehavior : NetworkBehaviour, IDamageable
     private Vector3 autoPatrolTarget;
     private bool hasAutoTarget = false;
 
+    [Header("Unpredictable Behaviors")]
+    [SerializeField] private float quirkChance = 0.02f; // 2% chance per frame to do something weird
+    [SerializeField] private float minTimeBetweenQuirks = 3f;
+    [SerializeField] private float maxTimeBetweenQuirks = 10f;
+    private float nextQuirkTime = 0f;
+    private bool isDoingQuirk = false;
+    private float quirkTimer = 0f;
+    private QuirkType currentQuirk = QuirkType.None;
+    private float quirkTargetRotation = 0f;
+    private bool isRunning = false;
+    private float runTimer = 0f;
+
+    public enum QuirkType
+    {
+        None,
+        Spin360,
+        Turn180,
+        RandomTurn,
+        Jump,
+        SuddenStop,
+        LookAround,
+        SprintBurst
+    }
+
     [Header("State")]
     [SerializeField] private NPCState currentState = NPCState.Idle;
     
@@ -77,6 +101,9 @@ public class NPCBehavior : NetworkBehaviour, IDamageable
         idleTimer = Random.Range(idleTimeMin, idleTimeMax);
         SetState(NPCState.Idle);
 
+        // Initialize quirk timing with random offset so NPCs don't all quirk at once
+        nextQuirkTime = Time.time + Random.Range(minTimeBetweenQuirks, maxTimeBetweenQuirks);
+
         Debug.Log($"[NPC] {npcName} initialized at {startPosition}. Waypoints: {waypoints.Count}, AutoPatrol: {autoPatrol}");
     }
 
@@ -92,6 +119,29 @@ public class NPCBehavior : NetworkBehaviour, IDamageable
 
         // Apply gravity
         ApplyGravity();
+
+        // Handle ongoing quirks
+        if (isDoingQuirk)
+        {
+            HandleOngoingQuirk();
+            return; // Don't do normal behavior while quirking
+        }
+
+        // Check for random quirks (only while walking or idle)
+        if ((currentState == NPCState.Walking || currentState == NPCState.Idle) && Time.time >= nextQuirkTime)
+        {
+            TryStartQuirk();
+        }
+
+        // Update run timer
+        if (isRunning)
+        {
+            runTimer -= Time.deltaTime;
+            if (runTimer <= 0f)
+            {
+                isRunning = false;
+            }
+        }
 
         switch (currentState)
         {
@@ -112,12 +162,161 @@ public class NPCBehavior : NetworkBehaviour, IDamageable
 
     private void ApplyGravity()
     {
-        // Simple approach: keep NPCs at Y=1 (ground level)
-        if (transform.position.y != 1f)
+        // Simple approach: keep NPCs at Y=0 (ground level)
+        if (transform.position.y != 0f)
         {
-            transform.position = new Vector3(transform.position.x, 1f, transform.position.z);
+            transform.position = new Vector3(transform.position.x, 0f, transform.position.z);
         }
     }
+
+    // ==================== UNPREDICTABLE BEHAVIORS ====================
+
+    private void TryStartQuirk()
+    {
+        // Random chance to do a quirk
+        if (Random.value > quirkChance * 10f) // Boost chance when timer triggers
+        {
+            // Schedule next check
+            nextQuirkTime = Time.time + Random.Range(minTimeBetweenQuirks, maxTimeBetweenQuirks);
+            return;
+        }
+
+        // Pick a random quirk
+        QuirkType[] quirks = new QuirkType[]
+        {
+            QuirkType.Spin360,
+            QuirkType.Turn180,
+            QuirkType.RandomTurn,
+            QuirkType.Jump,
+            QuirkType.SuddenStop,
+            QuirkType.LookAround,
+            QuirkType.SprintBurst
+        };
+
+        currentQuirk = quirks[Random.Range(0, quirks.Length)];
+        isDoingQuirk = true;
+        quirkTimer = 0f;
+
+        // Initialize quirk-specific data
+        switch (currentQuirk)
+        {
+            case QuirkType.Spin360:
+                quirkTargetRotation = transform.eulerAngles.y + 360f;
+                break;
+            case QuirkType.Turn180:
+                quirkTargetRotation = transform.eulerAngles.y + 180f;
+                break;
+            case QuirkType.RandomTurn:
+                quirkTargetRotation = transform.eulerAngles.y + Random.Range(45f, 270f) * (Random.value > 0.5f ? 1f : -1f);
+                break;
+            case QuirkType.SprintBurst:
+                isRunning = true;
+                runTimer = Random.Range(1f, 3f);
+                isDoingQuirk = false; // Sprint continues during normal walking
+                break;
+        }
+
+        // Schedule next quirk
+        nextQuirkTime = Time.time + Random.Range(minTimeBetweenQuirks, maxTimeBetweenQuirks);
+
+        //Debug.Log($"[NPC] {npcName} doing quirk: {currentQuirk}");
+    }
+
+    private void HandleOngoingQuirk()
+    {
+        quirkTimer += Time.deltaTime;
+
+        switch (currentQuirk)
+        {
+            case QuirkType.Spin360:
+            case QuirkType.Turn180:
+            case QuirkType.RandomTurn:
+                HandleRotationQuirk();
+                break;
+            case QuirkType.Jump:
+                HandleJumpQuirk();
+                break;
+            case QuirkType.SuddenStop:
+                HandleSuddenStopQuirk();
+                break;
+            case QuirkType.LookAround:
+                HandleLookAroundQuirk();
+                break;
+        }
+    }
+
+    private void HandleRotationQuirk()
+    {
+        float rotationSpeed = currentQuirk == QuirkType.Spin360 ? 400f : 250f;
+        float currentY = transform.eulerAngles.y;
+        float newY = Mathf.MoveTowardsAngle(currentY, quirkTargetRotation, rotationSpeed * Time.deltaTime);
+        transform.eulerAngles = new Vector3(0f, newY, 0f);
+
+        // Check if rotation complete
+        if (Mathf.Abs(Mathf.DeltaAngle(newY, quirkTargetRotation)) < 5f)
+        {
+            EndQuirk();
+        }
+
+        // Timeout safety
+        if (quirkTimer > 3f)
+        {
+            EndQuirk();
+        }
+    }
+
+    private void HandleJumpQuirk()
+    {
+        float jumpDuration = 0.5f;
+        float jumpHeight = 1.5f;
+
+        if (quirkTimer < jumpDuration)
+        {
+            // Parabolic jump
+            float t = quirkTimer / jumpDuration;
+            float height = 4f * jumpHeight * t * (1f - t); // Parabola
+            transform.position = new Vector3(transform.position.x, height, transform.position.z);
+        }
+        else
+        {
+            transform.position = new Vector3(transform.position.x, 0f, transform.position.z);
+            EndQuirk();
+        }
+    }
+
+    private void HandleSuddenStopQuirk()
+    {
+        // Just stand still for a moment
+        if (quirkTimer > Random.Range(0.5f, 1.5f))
+        {
+            EndQuirk();
+        }
+    }
+
+    private void HandleLookAroundQuirk()
+    {
+        float lookDuration = 2f;
+
+        if (quirkTimer < lookDuration)
+        {
+            // Look left and right
+            float lookAngle = Mathf.Sin(quirkTimer * 4f) * 45f;
+            transform.eulerAngles = new Vector3(0f, transform.eulerAngles.y + lookAngle * Time.deltaTime * 2f, 0f);
+        }
+        else
+        {
+            EndQuirk();
+        }
+    }
+
+    private void EndQuirk()
+    {
+        isDoingQuirk = false;
+        currentQuirk = QuirkType.None;
+        quirkTimer = 0f;
+    }
+
+    // ==================== STATE HANDLERS ====================
 
     private void HandleIdleState()
     {
@@ -179,10 +378,11 @@ public class NPCBehavior : NetworkBehaviour, IDamageable
         if (distance > waypointReachDistance)
         {
             direction.Normalize();
-            
-            // Move NPC
-            Vector3 movement = direction * walkSpeed * Time.deltaTime;
-            
+
+            // Move NPC - use run speed if sprinting
+            float currentSpeed = isRunning ? runSpeed : walkSpeed;
+            Vector3 movement = direction * currentSpeed * Time.deltaTime;
+
             if (characterController != null)
             {
                 characterController.Move(movement);
@@ -191,7 +391,7 @@ public class NPCBehavior : NetworkBehaviour, IDamageable
             {
                 transform.position += movement;
             }
-            
+
             // Rotate towards target
             if (direction.sqrMagnitude > 0.01f)
             {
@@ -362,8 +562,12 @@ public class NPCBehavior : NetworkBehaviour, IDamageable
         SetState(NPCState.Dead);
         Debug.Log($"[NPC] {npcName} died! IsAlien: {isAlien}");
 
-        // Spawn blood decal
-        if (BloodDecalManager.Instance != null)
+        // Spawn blood decal (networked)
+        if (NetworkAudioManager.Instance != null)
+        {
+            NetworkAudioManager.Instance.SpawnBloodDecal(transform.position);
+        }
+        else if (BloodDecalManager.Instance != null)
         {
             BloodDecalManager.Instance.SpawnBloodDecal(transform.position);
         }
@@ -390,29 +594,18 @@ public class NPCBehavior : NetworkBehaviour, IDamageable
             collider.enabled = false;
         }
 
-        // Handle destruction based on network state
+        // Handle destruction based on network state - IMMEDIATE despawn
         if (!IsSpawned)
         {
-            // Single player or not networked - regular destroy
-            Destroy(gameObject, 5f);
+            // Single player or not networked - destroy immediately
+            Destroy(gameObject);
         }
         else if (IsServer)
         {
-            // Only server can destroy NetworkObjects
-            StartCoroutine(DespawnAfterDelay(5f));
-        }
-        // Client does nothing - server will despawn and sync to all clients
-    }
-
-    private System.Collections.IEnumerator DespawnAfterDelay(float delay)
-    {
-        yield return new WaitForSeconds(delay);
-
-        // Check if still valid and spawned
-        if (this != null && IsSpawned)
-        {
+            // Only server can destroy NetworkObjects - despawn immediately
             NetworkObject.Despawn();
         }
+        // Client does nothing - server will despawn and sync to all clients
     }
 
     public void SetAsAlien(bool alien)

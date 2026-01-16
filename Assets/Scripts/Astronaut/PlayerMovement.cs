@@ -42,7 +42,7 @@ public class PlayerMovement : MonoBehaviour
         controller.minMoveDistance = 0.001f;
         controller.height = 2f;
         controller.radius = 0.5f;
-        controller.center = new Vector3(0, 0, 0); // Center at chest height for proper trigger detection
+        controller.center = new Vector3(0, 1, 0); // Center at y=1 for height=2 capsule (feet at 0, head at 2)
     }
 
 
@@ -69,11 +69,38 @@ public class PlayerMovement : MonoBehaviour
         // Find camera if not found yet
         FindCamera();
 
-        // Enable player camera when player is controlled
+        // STEP 1: Disable ALL other cameras and AudioListeners FIRST
+        Debug.Log("[PlayerMovement] Disabling all other cameras...");
+        Camera[] allCameras = FindObjectsOfType<Camera>(true);
+        foreach (Camera cam in allCameras)
+        {
+            if (playerCamera == null || cam != playerCamera)
+            {
+                cam.gameObject.SetActive(false);
+                Debug.Log($"[PlayerMovement] Disabled camera: {cam.gameObject.name}");
+            }
+        }
+
+        AudioListener[] allListeners = FindObjectsOfType<AudioListener>(true);
+        foreach (var listener in allListeners)
+        {
+            listener.enabled = false;
+        }
+
+        // STEP 2: Enable player camera when player is controlled
         if (playerCamera != null)
         {
             playerCamera.gameObject.SetActive(true);
             playerCamera.enabled = true;
+
+            // Ensure our camera has AudioListener and it's enabled
+            AudioListener ourListener = playerCamera.GetComponent<AudioListener>();
+            if (ourListener == null)
+            {
+                ourListener = playerCamera.gameObject.AddComponent<AudioListener>();
+            }
+            ourListener.enabled = true;
+
             Debug.Log($"[PlayerMovement] Enabled camera: {playerCamera.gameObject.name}");
         }
 

@@ -431,6 +431,32 @@ public class NetworkAudioManager : MonoBehaviour
         }
     }
 
+    // ==================== VISUAL EFFECTS ====================
+
+    /// <summary>
+    /// Spawn blood decal - synced to all clients
+    /// </summary>
+    public void SpawnBloodDecal(Vector3 position)
+    {
+        if (!ShouldSync())
+        {
+            // Single player - spawn locally
+            BloodDecalManager.Instance?.SpawnBloodDecal(position);
+            return;
+        }
+
+        var player = FindAnyNetworkedPlayer();
+        if (player != null)
+        {
+            player.SpawnBloodDecalServerRpc(position);
+        }
+        else
+        {
+            // Fallback to local
+            BloodDecalManager.Instance?.SpawnBloodDecal(position);
+        }
+    }
+
     void OnDestroy()
     {
         if (Instance == this)

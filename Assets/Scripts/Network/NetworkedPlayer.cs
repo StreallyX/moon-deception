@@ -595,4 +595,23 @@ public class NetworkedPlayer : NetworkBehaviour
     }
 
     #endregion
+
+    #region Effects RPCs (Blood Decals, etc.)
+
+    /// <summary>
+    /// Spawn blood decal at position - synced to all clients
+    /// </summary>
+    [ServerRpc(RequireOwnership = false)]
+    public void SpawnBloodDecalServerRpc(Vector3 position)
+    {
+        SpawnBloodDecalClientRpc(position);
+    }
+
+    [ClientRpc]
+    private void SpawnBloodDecalClientRpc(Vector3 position)
+    {
+        BloodDecalManager.Instance?.SpawnBloodDecal(position);
+    }
+
+    #endregion
 }
