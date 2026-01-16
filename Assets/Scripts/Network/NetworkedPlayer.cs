@@ -2,6 +2,7 @@ using UnityEngine;
 using Unity.Netcode;
 using Unity.Netcode.Components;
 using System.Collections;
+using System.Collections.Generic;
 
 /// <summary>
 /// Networked player component - handles ownership and syncs state.
@@ -244,6 +245,18 @@ public class NetworkedPlayer : NetworkBehaviour
             if (alienAbilities != null)
             {
                 alienAbilities.enabled = true;
+                Debug.Log($"[NetworkedPlayer] ENABLED AlienAbilities! enabled={alienAbilities.enabled}");
+            }
+            else
+            {
+                Debug.LogError("[NetworkedPlayer] AlienAbilities is NULL! Component missing on alien prefab!");
+                // Try to add it dynamically
+                alienAbilities = gameObject.AddComponent<AlienAbilities>();
+                if (alienAbilities != null)
+                {
+                    alienAbilities.enabled = true;
+                    Debug.Log("[NetworkedPlayer] Added AlienAbilities dynamically and enabled it");
+                }
             }
 
             // Update UI for Alien
@@ -804,6 +817,342 @@ public class NetworkedPlayer : NetworkBehaviour
                     alienHealth.TakeDamage(damage);
                 }
             }
+        }
+    }
+
+    #endregion
+
+    #region Alien Ability RPCs
+
+    /// <summary>
+    /// Ability 1: Collision - push NPCs, everyone sees/hears
+    /// </summary>
+    [ServerRpc(RequireOwnership = false)]
+    public void UseCollisionAbilityServerRpc(Vector3 position)
+    {
+        UseCollisionAbilityClientRpc(position);
+    }
+
+    [ClientRpc]
+    private void UseCollisionAbilityClientRpc(Vector3 position)
+    {
+        Debug.Log($"[NetworkedPlayer] COLLISION effect received at {position}! IsAstronaut={PlayerMovement.IsPlayerControlled}");
+
+        // Play impact sound at position
+        AudioManager.Instance?.PlaySFX3D(AudioManager.Instance?.bulletImpactMetal, position);
+
+        // Create visual shockwave effect
+        CreateShockwaveEffect(position, 3f, new Color(1f, 0.4f, 0.4f, 0.8f));
+
+        // Shake camera if astronaut is nearby
+        if (PlayerMovement.IsPlayerControlled)
+        {
+            float dist = Vector3.Distance(position, Camera.main?.transform.position ?? Vector3.zero);
+            if (dist < 10f && CameraShake.Instance != null)
+            {
+                CameraShake.Instance.Shake(0.15f, 0.04f * (1f - dist / 10f));
+            }
+        }
+    }
+
+    /// <summary>
+    /// Ability 2: Glitch - visual distortion
+    /// </summary>
+    [ServerRpc(RequireOwnership = false)]
+    public void UseGlitchAbilityServerRpc(Vector3 position)
+    {
+        UseGlitchAbilityClientRpc(position);
+    }
+
+    [ClientRpc]
+    private void UseGlitchAbilityClientRpc(Vector3 position)
+    {
+        Debug.Log($"[NetworkedPlayer] GLITCH effect received at {position}! IsAstronaut={PlayerMovement.IsPlayerControlled}");
+
+        // Create glitch visual at position (for all players to see)
+        CreateGlitchEffect(position, 15f);
+
+        // Only affect astronaut player with post-process
+        if (PlayerMovement.IsPlayerControlled)
+        {
+            float dist = Vector3.Distance(position, Camera.main?.transform.position ?? Vector3.zero);
+            if (dist < 15f)
+            {
+                PostProcessController.Instance?.TriggerDamageEffect();
+                CameraShake.Instance?.Shake(0.3f, 0.05f);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Ability 3: Sound - creepy noise
+    /// </summary>
+    [ServerRpc(RequireOwnership = false)]
+    public void UseSoundAbilityServerRpc(Vector3 soundPosition)
+    {
+        UseSoundAbilityClientRpc(soundPosition);
+    }
+
+    [ClientRpc]
+    private void UseSoundAbilityClientRpc(Vector3 soundPosition)
+    {
+        Debug.Log($"[NetworkedPlayer] SOUND effect received at {soundPosition}! IsAstronaut={PlayerMovement.IsPlayerControlled}");
+
+        // Play creepy sound - everyone hears it
+        AudioManager.Instance?.PlayAlienGrowl(soundPosition);
+
+        // Create subtle visual indicator where sound came from
+        CreateSoundIndicator(soundPosition);
+    }
+
+    /// <summary>
+    /// Ability 4: Wind - environmental disturbance
+    /// </summary>
+    [ServerRpc(RequireOwnership = false)]
+    public void UseWindAbilityServerRpc(Vector3 position)
+    {
+        UseWindAbilityClientRpc(position);
+    }
+
+    [ClientRpc]
+    private void UseWindAbilityClientRpc(Vector3 position)
+    {
+        Debug.Log($"[NetworkedPlayer] WIND effect received at {position}! IsAstronaut={PlayerMovement.IsPlayerControlled}");
+
+        // Play power down sound
+        AudioManager.Instance?.PlayPowerDown();
+
+        // Create wind particle effect
+        CreateWindEffect(position, 8f);
+
+        // Flicker lights for all players
+        StartCoroutine(FlickerNearbyLights(position, 16f));
+
+        // Camera shake for astronaut
+        if (PlayerMovement.IsPlayerControlled)
+        {
+            float dist = Vector3.Distance(position, Camera.main?.transform.position ?? Vector3.zero);
+            if (dist < 16f && CameraShake.Instance != null)
+            {
+                CameraShake.Instance.Shake(0.4f, 0.06f * (1f - dist / 16f));
+            }
+        }
+    }
+
+    // ========== VISUAL EFFECT HELPERS ==========
+
+    void CreateShockwaveEffect(Vector3 position, float radius, Color color)
+    {
+        GameObject fx = new GameObject("ShockwaveEffect");
+        fx.transform.position = position;
+
+        // Create expanding ring
+        var lineRenderer = fx.AddComponent<LineRenderer>();
+        lineRenderer.positionCount = 32;
+        lineRenderer.startWidth = 0.1f;
+        lineRenderer.endWidth = 0.1f;
+        lineRenderer.startColor = color;
+        lineRenderer.endColor = new Color(color.r, color.g, color.b, 0f);
+        lineRenderer.material = GetSafeMaterial();
+        lineRenderer.useWorldSpace = true;
+        lineRenderer.loop = true;
+
+        // Draw circle
+        for (int i = 0; i < 32; i++)
+        {
+            float angle = (i / 32f) * Mathf.PI * 2f;
+            Vector3 pos = position + new Vector3(Mathf.Cos(angle), 0.1f, Mathf.Sin(angle)) * radius;
+            lineRenderer.SetPosition(i, pos);
+        }
+
+        Destroy(fx, 0.5f);
+    }
+
+    /// <summary>
+    /// Get a material that works in builds (fallback chain)
+    /// </summary>
+    Material GetSafeMaterial()
+    {
+        // Try different shaders in order of preference
+        Shader shader = Shader.Find("Sprites/Default");
+        if (shader == null) shader = Shader.Find("UI/Default");
+        if (shader == null) shader = Shader.Find("Unlit/Color");
+        if (shader == null) shader = Shader.Find("Legacy Shaders/Particles/Alpha Blended");
+
+        if (shader != null)
+        {
+            return new Material(shader);
+        }
+
+        // Ultimate fallback - use Unity's built-in default material
+        Debug.LogWarning("[NetworkedPlayer] No shader found, using default sprite material");
+        return new Material(Shader.Find("Hidden/InternalErrorShader"));
+    }
+
+    /// <summary>
+    /// Get a particle material that works in builds
+    /// </summary>
+    Material GetSafeParticleMaterial()
+    {
+        Shader shader = Shader.Find("Particles/Standard Unlit");
+        if (shader == null) shader = Shader.Find("Legacy Shaders/Particles/Alpha Blended");
+        if (shader == null) shader = Shader.Find("Unlit/Transparent");
+        if (shader == null) shader = Shader.Find("Sprites/Default");
+
+        if (shader != null)
+        {
+            return new Material(shader);
+        }
+
+        Debug.LogWarning("[NetworkedPlayer] No particle shader found");
+        return new Material(Shader.Find("Hidden/InternalErrorShader"));
+    }
+
+    void CreateGlitchEffect(Vector3 position, float radius)
+    {
+        // Create brief visual distortion indicator
+        GameObject fx = new GameObject("GlitchEffect");
+        fx.transform.position = position + Vector3.up;
+
+        // Simple particle burst
+        var ps = fx.AddComponent<ParticleSystem>();
+        ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+
+        var main = ps.main;
+        main.duration = 0.3f;
+        main.loop = false;
+        main.startLifetime = 0.5f;
+        main.startSpeed = 8f;
+        main.startSize = 0.2f;
+        main.startColor = new Color(0.4f, 0.8f, 1f, 0.8f);
+        main.maxParticles = 30;
+
+        var emission = ps.emission;
+        emission.rateOverTime = 0;
+        emission.SetBursts(new ParticleSystem.Burst[] { new ParticleSystem.Burst(0f, 20) });
+
+        var shape = ps.shape;
+        shape.shapeType = ParticleSystemShapeType.Sphere;
+        shape.radius = 0.5f;
+
+        var renderer = fx.GetComponent<ParticleSystemRenderer>();
+        renderer.material = GetSafeParticleMaterial();
+
+        ps.Play();
+        Destroy(fx, 1f);
+    }
+
+    void CreateSoundIndicator(Vector3 position)
+    {
+        // Create brief sound wave visual
+        GameObject fx = new GameObject("SoundIndicator");
+        fx.transform.position = position + Vector3.up * 0.5f;
+
+        // Simple expanding ring on ground
+        var lineRenderer = fx.AddComponent<LineRenderer>();
+        lineRenderer.positionCount = 32;
+        lineRenderer.startWidth = 0.05f;
+        lineRenderer.endWidth = 0.05f;
+        lineRenderer.startColor = new Color(1f, 0.9f, 0.3f, 0.6f);
+        lineRenderer.endColor = new Color(1f, 0.9f, 0.3f, 0f);
+        lineRenderer.material = GetSafeMaterial();
+        lineRenderer.loop = true;
+
+        // Animate expansion via coroutine
+        StartCoroutine(AnimateSoundWave(fx, position, 0f, 5f, 0.5f));
+    }
+
+    System.Collections.IEnumerator AnimateSoundWave(GameObject fx, Vector3 center, float startRadius, float endRadius, float duration)
+    {
+        var lr = fx.GetComponent<LineRenderer>();
+        float elapsed = 0f;
+
+        while (elapsed < duration && fx != null)
+        {
+            elapsed += Time.deltaTime;
+            float t = elapsed / duration;
+            float radius = Mathf.Lerp(startRadius, endRadius, t);
+            float alpha = 1f - t;
+
+            lr.startColor = new Color(1f, 0.9f, 0.3f, alpha * 0.6f);
+            lr.endColor = new Color(1f, 0.9f, 0.3f, alpha * 0.3f);
+
+            for (int i = 0; i < 32; i++)
+            {
+                float angle = (i / 32f) * Mathf.PI * 2f;
+                Vector3 pos = center + new Vector3(Mathf.Cos(angle), 0.1f, Mathf.Sin(angle)) * radius;
+                lr.SetPosition(i, pos);
+            }
+
+            yield return null;
+        }
+
+        if (fx != null) Destroy(fx);
+    }
+
+    void CreateWindEffect(Vector3 position, float radius)
+    {
+        GameObject fx = new GameObject("WindEffect");
+        fx.transform.position = position;
+
+        var ps = fx.AddComponent<ParticleSystem>();
+        ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+
+        var main = ps.main;
+        main.duration = 1f;
+        main.loop = false;
+        main.startLifetime = 1.5f;
+        main.startSpeed = 5f;
+        main.startSize = 0.15f;
+        main.startColor = new Color(0.5f, 1f, 0.5f, 0.5f);
+        main.maxParticles = 80;
+        main.gravityModifier = -0.2f;
+
+        var emission = ps.emission;
+        emission.rateOverTime = 0;
+        emission.SetBursts(new ParticleSystem.Burst[] { new ParticleSystem.Burst(0f, 50) });
+
+        var shape = ps.shape;
+        shape.shapeType = ParticleSystemShapeType.Sphere;
+        shape.radius = radius;
+
+        var renderer = fx.GetComponent<ParticleSystemRenderer>();
+        renderer.material = GetSafeParticleMaterial();
+
+        ps.Play();
+        Destroy(fx, 2f);
+    }
+
+    System.Collections.IEnumerator FlickerNearbyLights(Vector3 position, float radius)
+    {
+        Light[] lights = FindObjectsOfType<Light>();
+        List<Light> nearbyLights = new List<Light>();
+        Dictionary<Light, float> originalIntensities = new Dictionary<Light, float>();
+
+        foreach (var light in lights)
+        {
+            if (Vector3.Distance(light.transform.position, position) < radius)
+            {
+                nearbyLights.Add(light);
+                originalIntensities[light] = light.intensity;
+            }
+        }
+
+        // Flicker 3 times
+        for (int i = 0; i < 3; i++)
+        {
+            foreach (var light in nearbyLights)
+            {
+                if (light != null) light.intensity = 0f;
+            }
+            yield return new WaitForSeconds(0.1f);
+
+            foreach (var light in nearbyLights)
+            {
+                if (light != null && originalIntensities.ContainsKey(light))
+                    light.intensity = originalIntensities[light];
+            }
+            yield return new WaitForSeconds(0.1f);
         }
     }
 

@@ -625,6 +625,82 @@ public class NetworkAudioManager : MonoBehaviour
         }
     }
 
+    // ==================== ALIEN ABILITIES ====================
+
+    /// <summary>
+    /// Ability 1: Collision - synced effects
+    /// </summary>
+    public void UseCollisionAbility(Vector3 position)
+    {
+        if (!ShouldSync())
+        {
+            // Single player - local effects only
+            AudioManager.Instance?.PlaySFX3D(AudioManager.Instance?.bulletImpactMetal, position);
+            return;
+        }
+
+        var player = FindAnyNetworkedPlayer();
+        if (player != null)
+        {
+            player.UseCollisionAbilityServerRpc(position);
+        }
+    }
+
+    /// <summary>
+    /// Ability 2: Glitch - synced effects
+    /// </summary>
+    public void UseGlitchAbility(Vector3 position)
+    {
+        if (!ShouldSync())
+        {
+            PostProcessController.Instance?.TriggerDamageEffect();
+            CameraShake.Instance?.Shake(0.3f, 0.05f);
+            return;
+        }
+
+        var player = FindAnyNetworkedPlayer();
+        if (player != null)
+        {
+            player.UseGlitchAbilityServerRpc(position);
+        }
+    }
+
+    /// <summary>
+    /// Ability 3: Sound - synced effects
+    /// </summary>
+    public void UseSoundAbility(Vector3 soundPosition)
+    {
+        if (!ShouldSync())
+        {
+            AudioManager.Instance?.PlayAlienGrowl(soundPosition);
+            return;
+        }
+
+        var player = FindAnyNetworkedPlayer();
+        if (player != null)
+        {
+            player.UseSoundAbilityServerRpc(soundPosition);
+        }
+    }
+
+    /// <summary>
+    /// Ability 4: Wind - synced effects
+    /// </summary>
+    public void UseWindAbility(Vector3 position)
+    {
+        if (!ShouldSync())
+        {
+            AudioManager.Instance?.PlayPowerDown();
+            return;
+        }
+
+        var player = FindAnyNetworkedPlayer();
+        if (player != null)
+        {
+            player.UseWindAbilityServerRpc(position);
+        }
+    }
+
     void OnDestroy()
     {
         if (Instance == this)

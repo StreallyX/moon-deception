@@ -149,10 +149,19 @@ public class DefenseZone : MonoBehaviour
             zoneRenderer = marker.GetComponent<MeshRenderer>();
         }
 
-        // Create material - try URP shader first, fallback to Sprites/Default
+        // Create material - try multiple shaders for build compatibility
         Shader shader = Shader.Find("Universal Render Pipeline/Lit");
         if (shader == null) shader = Shader.Find("Sprites/Default");
         if (shader == null) shader = Shader.Find("Standard");
+        if (shader == null) shader = Shader.Find("UI/Default");
+        if (shader == null) shader = Shader.Find("Unlit/Color");
+        if (shader == null) shader = Shader.Find("Legacy Shaders/Diffuse");
+
+        if (shader == null)
+        {
+            Debug.LogError("[DefenseZone] No shader found! Visual effects will be broken.");
+            return;
+        }
 
         zoneMaterial = new Material(shader);
 

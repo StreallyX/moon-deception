@@ -17,6 +17,7 @@ GameObject:
   - component: {fileID: 230952394043555241}
   - component: {fileID: -822408876973237485}
   - component: {fileID: 5128623152061166417}
+  - component: {fileID: 8463974920218052545}
   m_Layer: 9
   m_Name: AlienPlayer
   m_TagString: Alien
@@ -288,6 +289,34 @@ CapsuleCollider:
   m_Height: 1
   m_Direction: 1
   m_Center: {x: 0, y: 0, z: 0}
+--- !u!114 &8463974920218052545
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 538128873290854545}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2fba6dde7a5dac345a5ee202d07d29df, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  ability1Key: 49
+  ability2Key: 50
+  ability3Key: 51
+  ability4Key: 52
+  collisionCooldown: 5
+  glitchCooldown: 8
+  soundCooldown: 6
+  windCooldown: 10
+  collisionRange: 3
+  glitchRange: 15
+  soundRange: 20
+  windRange: 8
+  collisionStress: 5
+  glitchStress: 8
+  soundStress: 6
+  windStress: 10
 --- !u!1 &1969867911455860173
 GameObject:
   m_ObjectHideFlags: 0

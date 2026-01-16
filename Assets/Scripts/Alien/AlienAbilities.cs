@@ -170,6 +170,7 @@ public class AlienAbilities : MonoBehaviour
         foreach (var hit in hits)
         {
             NPCBehavior npc = hit.GetComponent<NPCBehavior>();
+            if (npc == null) npc = hit.GetComponentInParent<NPCBehavior>();
             if (npc != null && npc.gameObject != gameObject)
             {
                 // Push NPC slightly
@@ -185,34 +186,17 @@ public class AlienAbilities : MonoBehaviour
         // Apply stress to astronaut if nearby
         ApplyStressToAstronaut(collisionRange * 2f, collisionStress);
 
-        // Play sound effect (networked - everyone hears it)
+        // Play networked effects (everyone sees/hears)
         if (NetworkAudioManager.Instance != null)
         {
-            NetworkAudioManager.Instance.PlayBulletImpact("Metal", transform.position);
+            NetworkAudioManager.Instance.UseCollisionAbility(transform.position);
         }
         else if (AudioManager.Instance != null)
         {
             AudioManager.Instance.PlaySFX3D(AudioManager.Instance.bulletImpactMetal, transform.position);
         }
 
-        // Visual feedback
-        StartCoroutine(CollisionVisualEffect());
-
         Debug.Log($"[AlienAbilities] Collision affected {affectedCount} NPCs");
-    }
-
-    IEnumerator CollisionVisualEffect()
-    {
-        // Quick camera shake for nearby astronaut
-        if (StressSystem.Instance != null)
-        {
-            float dist = Vector3.Distance(transform.position, StressSystem.Instance.transform.position);
-            if (dist < collisionRange * 2f && CameraShake.Instance != null)
-            {
-                CameraShake.Instance.Shake(0.1f, 0.03f);
-            }
-        }
-        yield return null;
     }
 
     // ==================== ABILITY 2: GLITCH ====================
@@ -224,41 +208,10 @@ public class AlienAbilities : MonoBehaviour
         // Apply stress
         ApplyStressToAstronaut(glitchRange, glitchStress);
 
-        // Trigger visual glitch effect on astronaut's screen
-        StartCoroutine(GlitchVisualEffect());
-    }
-
-    IEnumerator GlitchVisualEffect()
-    {
-        // Check if astronaut is in range
-        Vector3 astronautPos = Vector3.zero;
-        bool foundAstronaut = false;
-
-        if (StressSystem.Instance != null)
-        {
-            astronautPos = StressSystem.Instance.transform.position;
-            foundAstronaut = true;
-        }
-        else
-        {
-            var player = FindObjectOfType<PlayerMovement>();
-            if (player != null)
-            {
-                astronautPos = player.transform.position;
-                foundAstronaut = true;
-            }
-        }
-
-        if (!foundAstronaut) yield break;
-
-        float dist = Vector3.Distance(transform.position, astronautPos);
-        if (dist > glitchRange) yield break;
-
-        // Apply glitch via post-processing (networked)
+        // Play networked effects (everyone sees visual, astronaut gets post-process)
         if (NetworkAudioManager.Instance != null)
         {
-            NetworkAudioManager.Instance.TriggerGlitchEffect();
-            NetworkAudioManager.Instance.TriggerCameraShake(0.3f, 0.05f);
+            NetworkAudioManager.Instance.UseGlitchAbility(transform.position);
         }
         else
         {
@@ -271,8 +224,6 @@ public class AlienAbilities : MonoBehaviour
                 CameraShake.Instance.Shake(0.3f, 0.05f);
             }
         }
-
-        yield return null;
     }
 
     // ==================== ABILITY 3: SOUND ====================
@@ -288,10 +239,10 @@ public class AlienAbilities : MonoBehaviour
         // Apply stress
         ApplyStressToAstronaut(soundRange, soundStress);
 
-        // Play creepy sound (networked - everyone hears it)
+        // Play networked sound effects (everyone hears and sees indicator)
         if (NetworkAudioManager.Instance != null)
         {
-            NetworkAudioManager.Instance.PlayAlienGrowl(soundPos);
+            NetworkAudioManager.Instance.UseSoundAbility(soundPos);
         }
         else if (AudioManager.Instance != null)
         {
@@ -303,6 +254,7 @@ public class AlienAbilities : MonoBehaviour
         foreach (var hit in hits)
         {
             NPCBehavior npc = hit.GetComponent<NPCBehavior>();
+            if (npc == null) npc = hit.GetComponentInParent<NPCBehavior>();
             if (npc != null)
             {
                 // NPC heard something - look towards sound
@@ -328,10 +280,10 @@ public class AlienAbilities : MonoBehaviour
         // Apply stress (highest value)
         ApplyStressToAstronaut(windRange, windStress);
 
-        // Play power down sound (networked - everyone hears it)
+        // Play networked effects (everyone sees particles and light flicker)
         if (NetworkAudioManager.Instance != null)
         {
-            NetworkAudioManager.Instance.PlayPowerDown();
+            NetworkAudioManager.Instance.UseWindAbility(transform.position);
         }
         else if (AudioManager.Instance != null)
         {
@@ -344,6 +296,7 @@ public class AlienAbilities : MonoBehaviour
         foreach (var hit in hits)
         {
             NPCBehavior npc = hit.GetComponent<NPCBehavior>();
+            if (npc == null) npc = hit.GetComponentInParent<NPCBehavior>();
             if (npc != null && npc.gameObject != gameObject)
             {
                 // Random push direction
@@ -359,75 +312,7 @@ public class AlienAbilities : MonoBehaviour
             }
         }
 
-        // Visual effect - dust/particles
-        StartCoroutine(WindVisualEffect());
-
-        // Flicker lights briefly
-        StartCoroutine(FlickerLights());
-
         Debug.Log($"[AlienAbilities] Wind affected {affectedCount} NPCs");
-    }
-
-    IEnumerator WindVisualEffect()
-    {
-        // Create simple particle burst
-        GameObject windFx = new GameObject("WindEffect");
-        windFx.transform.position = transform.position;
-
-        ParticleSystem ps = windFx.AddComponent<ParticleSystem>();
-        ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
-
-        var main = ps.main;
-        main.duration = 0.5f;
-        main.loop = false;
-        main.startLifetime = 1f;
-        main.startSpeed = 5f;
-        main.startSize = 0.1f;
-        main.startColor = new Color(0.5f, 0.5f, 0.5f, 0.5f);
-        main.maxParticles = 50;
-        main.gravityModifier = -0.1f;
-
-        var emission = ps.emission;
-        emission.rateOverTime = 0;
-        emission.SetBursts(new ParticleSystem.Burst[] { new ParticleSystem.Burst(0f, 30) });
-
-        var shape = ps.shape;
-        shape.shapeType = ParticleSystemShapeType.Sphere;
-        shape.radius = windRange;
-
-        var renderer = windFx.GetComponent<ParticleSystemRenderer>();
-        renderer.material = new Material(Shader.Find("Particles/Standard Unlit"));
-
-        ps.Play();
-        Destroy(windFx, 2f);
-
-        yield return null;
-    }
-
-    IEnumerator FlickerLights()
-    {
-        // Find all lights in range and flicker them
-        Light[] lights = FindObjectsOfType<Light>();
-
-        for (int i = 0; i < 3; i++)
-        {
-            foreach (var light in lights)
-            {
-                if (Vector3.Distance(light.transform.position, transform.position) < windRange * 2f)
-                {
-                    light.enabled = false;
-                }
-            }
-
-            yield return new WaitForSeconds(0.1f);
-
-            foreach (var light in lights)
-            {
-                light.enabled = true;
-            }
-
-            yield return new WaitForSeconds(0.1f);
-        }
     }
 
     // ==================== HELPER ====================
@@ -481,29 +366,45 @@ public class AlienAbilities : MonoBehaviour
     }
 
     // ==================== UI HELPER ====================
+
+    // Textures for UI
+    private Texture2D bgTexture;
+    private Texture2D cooldownBgTexture;
+    private Texture2D cooldownFillTexture;
+
+    void CreateUITextures()
+    {
+        if (bgTexture == null)
+        {
+            bgTexture = new Texture2D(1, 1);
+            bgTexture.SetPixel(0, 0, new Color(0.1f, 0.05f, 0.15f, 0.85f));
+            bgTexture.Apply();
+        }
+
+        if (cooldownBgTexture == null)
+        {
+            cooldownBgTexture = new Texture2D(1, 1);
+            cooldownBgTexture.SetPixel(0, 0, new Color(0.2f, 0.2f, 0.2f, 0.8f));
+            cooldownBgTexture.Apply();
+        }
+
+        if (cooldownFillTexture == null)
+        {
+            cooldownFillTexture = new Texture2D(1, 1);
+            cooldownFillTexture.SetPixel(0, 0, new Color(0.8f, 0.3f, 1f, 0.9f));
+            cooldownFillTexture.Apply();
+        }
+    }
+
     void OnGUI()
     {
         // CRITICAL: Check if this component is enabled (means we're the local alien player)
         if (!enabled) return;
 
-        // If AlienController.IsAlienControlled is false but we're enabled, show debug info
-        if (!AlienController.IsAlienControlled)
-        {
-            // Debug: Show why abilities might not work
-            GUIStyle debugStyle = new GUIStyle(GUI.skin.label);
-            debugStyle.fontSize = 12;
-            debugStyle.normal.textColor = Color.yellow;
-            GUI.Label(new Rect(10, Screen.height - 180, 300, 60),
-                $"[DEBUG] AlienAbilities enabled but:\n" +
-                $"ActiveAlien={(AlienController.ActiveAlien != null ? AlienController.ActiveAlien.gameObject.name : "NULL")}\n" +
-                $"AlienController.enabled={(alienController != null ? alienController.enabled.ToString() : "null")}",
-                debugStyle);
+        // Create textures if needed
+        CreateUITextures();
 
-            // Still show abilities UI even if IsAlienControlled is false
-            // This helps debug the issue
-        }
-
-        // Check if in chaos mode (don't show abilities UI during chaos)
+        // Check if in chaos mode (don't show abilities UI during chaos - show attack info instead)
         bool isChaos = false;
         if (NetworkGameManager.Instance != null)
         {
@@ -514,62 +415,119 @@ public class AlienAbilities : MonoBehaviour
             isChaos = (GameManager.Instance.CurrentPhase == GameManager.GamePhase.Chaos);
         }
 
-        if (isChaos) return;
+        if (isChaos)
+        {
+            DrawChaosUI();
+            return;
+        }
 
-        // Background box for better visibility
-        float boxWidth = 220;
-        float boxHeight = 130;
-        float x = 15;
-        float y = Screen.height - boxHeight - 15;
+        // ========== ABILITIES UI - BOTTOM RIGHT ==========
+        float boxWidth = 200;
+        float boxHeight = 160;
+        float padding = 15;
+        float x = Screen.width - boxWidth - padding;
+        float y = Screen.height - boxHeight - padding;
 
-        // Semi-transparent background
-        GUI.Box(new Rect(x - 5, y - 5, boxWidth, boxHeight), "");
+        // Background
+        GUI.DrawTexture(new Rect(x - 10, y - 10, boxWidth + 20, boxHeight + 20), bgTexture);
+
+        // Title
+        GUIStyle titleStyle = new GUIStyle(GUI.skin.label);
+        titleStyle.fontSize = 16;
+        titleStyle.fontStyle = FontStyle.Bold;
+        titleStyle.normal.textColor = new Color(0.9f, 0.5f, 1f);
+        titleStyle.alignment = TextAnchor.MiddleCenter;
+        GUI.Label(new Rect(x, y, boxWidth, 22), "POUVOIRS ALIEN", titleStyle);
+
+        float lineY = y + 28;
+        float lineHeight = 32;
+
+        // Draw each ability with cooldown bar
+        DrawAbilityWithBar(x, lineY, "1", "COLLISION", CanUseAbility1, collisionTimer, collisionCooldown, new Color(1f, 0.4f, 0.4f));
+        lineY += lineHeight;
+
+        DrawAbilityWithBar(x, lineY, "2", "GLITCH", CanUseAbility2, glitchTimer, glitchCooldown, new Color(0.4f, 0.8f, 1f));
+        lineY += lineHeight;
+
+        DrawAbilityWithBar(x, lineY, "3", "SON", CanUseAbility3, soundTimer, soundCooldown, new Color(1f, 0.9f, 0.3f));
+        lineY += lineHeight;
+
+        DrawAbilityWithBar(x, lineY, "4", "VENT", CanUseAbility4, windTimer, windCooldown, new Color(0.5f, 1f, 0.5f));
+    }
+
+    void DrawAbilityWithBar(float x, float y, string key, string name, bool ready, float timer, float maxCooldown, Color abilityColor)
+    {
+        float barWidth = 180;
+        float barHeight = 8;
+        float keyBoxSize = 22;
+
+        // Key box
+        GUIStyle keyStyle = new GUIStyle(GUI.skin.box);
+        keyStyle.fontSize = 14;
+        keyStyle.fontStyle = FontStyle.Bold;
+        keyStyle.alignment = TextAnchor.MiddleCenter;
+        keyStyle.normal.textColor = ready ? Color.white : Color.gray;
+
+        GUI.backgroundColor = ready ? abilityColor : new Color(0.3f, 0.3f, 0.3f);
+        GUI.Box(new Rect(x, y, keyBoxSize, keyBoxSize), key, keyStyle);
+        GUI.backgroundColor = Color.white;
+
+        // Ability name
+        GUIStyle nameStyle = new GUIStyle(GUI.skin.label);
+        nameStyle.fontSize = 12;
+        nameStyle.fontStyle = FontStyle.Bold;
+        nameStyle.normal.textColor = ready ? abilityColor : Color.gray;
+        GUI.Label(new Rect(x + keyBoxSize + 5, y, 80, 18), name, nameStyle);
+
+        // Status text
+        GUIStyle statusStyle = new GUIStyle(GUI.skin.label);
+        statusStyle.fontSize = 10;
+        statusStyle.alignment = TextAnchor.MiddleRight;
+        statusStyle.normal.textColor = ready ? Color.green : Color.gray;
+
+        string statusText = ready ? "PRÊT" : $"{timer:F1}s";
+        GUI.Label(new Rect(x + barWidth - 40, y, 40, 18), statusText, statusStyle);
+
+        // Cooldown bar background
+        float barY = y + 18;
+        GUI.DrawTexture(new Rect(x, barY, barWidth, barHeight), cooldownBgTexture);
+
+        // Cooldown bar fill
+        float fillPercent = ready ? 1f : 1f - (timer / maxCooldown);
+        if (fillPercent > 0)
+        {
+            Texture2D fillTex = new Texture2D(1, 1);
+            fillTex.SetPixel(0, 0, ready ? abilityColor : new Color(abilityColor.r * 0.5f, abilityColor.g * 0.5f, abilityColor.b * 0.5f, 0.8f));
+            fillTex.Apply();
+            GUI.DrawTexture(new Rect(x, barY, barWidth * fillPercent, barHeight), fillTex);
+        }
+    }
+
+    void DrawChaosUI()
+    {
+        // During chaos, show attack info instead
+        float boxWidth = 180;
+        float boxHeight = 60;
+        float padding = 15;
+        float x = Screen.width - boxWidth - padding;
+        float y = Screen.height - boxHeight - padding;
+
+        // Background
+        GUI.DrawTexture(new Rect(x - 10, y - 10, boxWidth + 20, boxHeight + 20), bgTexture);
 
         // Title
         GUIStyle titleStyle = new GUIStyle(GUI.skin.label);
         titleStyle.fontSize = 18;
         titleStyle.fontStyle = FontStyle.Bold;
-        titleStyle.normal.textColor = new Color(1f, 0.5f, 0f); // Orange
-        GUI.Label(new Rect(x, y, boxWidth, 25), "POUVOIRS CHAOS", titleStyle);
+        titleStyle.normal.textColor = Color.red;
+        titleStyle.alignment = TextAnchor.MiddleCenter;
+        GUI.Label(new Rect(x, y, boxWidth, 25), "MODE CHAOS", titleStyle);
 
-        // Ability styles
-        GUIStyle readyStyle = new GUIStyle(GUI.skin.label);
-        readyStyle.fontSize = 16;
-        readyStyle.fontStyle = FontStyle.Bold;
-        readyStyle.normal.textColor = Color.green;
-
-        GUIStyle cooldownStyle = new GUIStyle(GUI.skin.label);
-        cooldownStyle.fontSize = 16;
-        cooldownStyle.normal.textColor = Color.gray;
-
-        float lineY = y + 28;
-        float lineHeight = 22;
-
-        // Ability 1 - Collision
-        DrawAbilityLine(x, lineY, "[1] Collision", CanUseAbility1, collisionTimer, readyStyle, cooldownStyle);
-        lineY += lineHeight;
-
-        // Ability 2 - Glitch
-        DrawAbilityLine(x, lineY, "[2] Glitch", CanUseAbility2, glitchTimer, readyStyle, cooldownStyle);
-        lineY += lineHeight;
-
-        // Ability 3 - Sound
-        DrawAbilityLine(x, lineY, "[3] Son", CanUseAbility3, soundTimer, readyStyle, cooldownStyle);
-        lineY += lineHeight;
-
-        // Ability 4 - Wind
-        DrawAbilityLine(x, lineY, "[4] Vent", CanUseAbility4, windTimer, readyStyle, cooldownStyle);
-    }
-
-    void DrawAbilityLine(float x, float y, string name, bool ready, float timer, GUIStyle readyStyle, GUIStyle cooldownStyle)
-    {
-        if (ready)
-        {
-            GUI.Label(new Rect(x, y, 200, 22), $"{name}: PRÊT", readyStyle);
-        }
-        else
-        {
-            GUI.Label(new Rect(x, y, 200, 22), $"{name}: {timer:F1}s", cooldownStyle);
-        }
+        // Attack info
+        GUIStyle infoStyle = new GUIStyle(GUI.skin.label);
+        infoStyle.fontSize = 14;
+        infoStyle.normal.textColor = new Color(1f, 0.8f, 0.8f);
+        infoStyle.alignment = TextAnchor.MiddleCenter;
+        GUI.Label(new Rect(x, y + 28, boxWidth, 20), "CLIC GAUCHE = Attaque", infoStyle);
     }
 }
