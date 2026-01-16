@@ -94,7 +94,14 @@ public class AlienHealth : MonoBehaviour, IDamageable
         shape.angle = 30f;
 
         var renderer = bloodObj.GetComponent<ParticleSystemRenderer>();
-        renderer.material = new Material(Shader.Find("Particles/Standard Unlit"));
+        // Use fallback shader chain for build compatibility
+        Shader shader = Shader.Find("Particles/Standard Unlit");
+        if (shader == null) shader = Shader.Find("Legacy Shaders/Particles/Alpha Blended");
+        if (shader == null) shader = Shader.Find("Sprites/Default");
+        if (shader != null)
+        {
+            renderer.material = new Material(shader);
+        }
 
         ps.Play();
         Destroy(bloodObj, 2f);

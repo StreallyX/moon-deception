@@ -16,7 +16,7 @@ public class AlienTransformation : MonoBehaviour
     public float attackDamage = 35f;
     public float attackRange = 2.5f;
     public float attackCooldown = 0.8f;
-    public float chaosHealthBoost = 100f; // Extra HP when transformed (100 + 100 = 200)
+    public float chaosHealthBoost = 900f; // Extra HP when transformed (100 + 900 = 1000)
 
     [Header("Transformation Visuals")]
     public Color transformedColor = new Color(0.8f, 0.1f, 0.1f);
@@ -110,11 +110,26 @@ public class AlienTransformation : MonoBehaviour
 
     void FindAstronaut()
     {
-        // Find astronaut - try multiple methods
+        // In multiplayer, look for NetworkedPlayer that is astronaut FIRST
+        // This is the most reliable method because NetworkedPlayer exists on both local and remote players
+        var networkedPlayers = FindObjectsOfType<NetworkedPlayer>();
+        foreach (var np in networkedPlayers)
+        {
+            // Check both the local flag and the NetworkVariable
+            if (np.isAstronaut || np.IsAstronautRole.Value)
+            {
+                astronautTransform = np.transform;
+                Debug.Log($"[AlienTransformation] Found astronaut via NetworkedPlayer: {np.gameObject.name}");
+                return;
+            }
+        }
+
+        // Fallback: Find astronaut by components (single player or components enabled)
         var stressSystem = FindObjectOfType<StressSystem>();
         if (stressSystem != null)
         {
             astronautTransform = stressSystem.transform;
+            Debug.Log("[AlienTransformation] Found astronaut via StressSystem");
             return;
         }
 
@@ -122,19 +137,20 @@ public class AlienTransformation : MonoBehaviour
         if (playerMovement != null)
         {
             astronautTransform = playerMovement.transform;
+            Debug.Log("[AlienTransformation] Found astronaut via PlayerMovement");
             return;
         }
 
-        // In multiplayer, look for NetworkedPlayer that is astronaut
-        var networkedPlayers = FindObjectsOfType<NetworkedPlayer>();
-        foreach (var np in networkedPlayers)
+        // Last resort: Look for AstronautHealth component
+        var astronautHealth = FindObjectOfType<AstronautHealth>();
+        if (astronautHealth != null)
         {
-            if (np.isAstronaut)
-            {
-                astronautTransform = np.transform;
-                return;
-            }
+            astronautTransform = astronautHealth.transform;
+            Debug.Log("[AlienTransformation] Found astronaut via AstronautHealth");
+            return;
         }
+
+        Debug.LogWarning("[AlienTransformation] Could not find astronaut!");
     }
 
     System.Collections.IEnumerator LateSubscribe()
@@ -370,8 +386,18 @@ public class AlienTransformation : MonoBehaviour
         // Attack animation
         StartCoroutine(AttackAnimation());
 
+        // Try to find astronaut if not found yet
+        if (astronautTransform == null)
+        {
+            FindAstronaut();
+        }
+
         // Check for astronaut in range
-        if (astronautTransform == null) return;
+        if (astronautTransform == null)
+        {
+            Debug.LogWarning("[AlienTransformation] Attack failed - astronaut not found!");
+            return;
+        }
 
         float dist = Vector3.Distance(transform.position, astronautTransform.position);
 

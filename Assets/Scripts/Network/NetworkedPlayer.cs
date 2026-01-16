@@ -132,11 +132,46 @@ public class NetworkedPlayer : NetworkBehaviour
         if (playerShooting == null) playerShooting = GetComponent<PlayerShooting>();
         if (stressSystem == null) stressSystem = GetComponent<StressSystem>();
 
-        // Alien
+        // Alien - find existing components
         if (alienController == null) alienController = GetComponent<AlienController>();
         if (hungerSystem == null) hungerSystem = GetComponent<HungerSystem>();
         if (alienHealth == null) alienHealth = GetComponent<AlienHealth>();
         if (alienAbilities == null) alienAbilities = GetComponent<AlienAbilities>();
+
+        // Auto-add missing alien components if this is an alien prefab (has AlienController)
+        if (alienController != null)
+        {
+            if (alienHealth == null)
+            {
+                alienHealth = gameObject.AddComponent<AlienHealth>();
+                Debug.Log("[NetworkedPlayer] Auto-added AlienHealth to alien");
+            }
+
+            if (alienAbilities == null)
+            {
+                alienAbilities = gameObject.AddComponent<AlienAbilities>();
+                Debug.Log("[NetworkedPlayer] Auto-added AlienAbilities to alien");
+            }
+
+            // AlienTransformation
+            var alienTransformation = GetComponent<AlienTransformation>();
+            if (alienTransformation == null)
+            {
+                gameObject.AddComponent<AlienTransformation>();
+                Debug.Log("[NetworkedPlayer] Auto-added AlienTransformation to alien");
+            }
+        }
+
+        // Auto-add missing astronaut components if this is an astronaut prefab (has PlayerMovement)
+        if (playerMovement != null)
+        {
+            var astronautHealth = GetComponent<AstronautHealth>();
+            if (astronautHealth == null)
+            {
+                gameObject.AddComponent<AstronautHealth>();
+                Debug.Log("[NetworkedPlayer] Auto-added AstronautHealth to astronaut");
+            }
+        }
 
         // Shared
         if (playerCamera == null) playerCamera = GetComponentInChildren<Camera>(true);
@@ -147,6 +182,8 @@ public class NetworkedPlayer : NetworkBehaviour
         Debug.Log($"  - PlayerMovement: {(playerMovement != null ? "FOUND" : "NULL")}");
         Debug.Log($"  - PlayerShooting: {(playerShooting != null ? "FOUND" : "NULL")}");
         Debug.Log($"  - AlienController: {(alienController != null ? "FOUND" : "NULL")}");
+        Debug.Log($"  - AlienHealth: {(alienHealth != null ? "FOUND" : "NULL")}");
+        Debug.Log($"  - AlienAbilities: {(alienAbilities != null ? "FOUND" : "NULL")}");
         Debug.Log($"  - HungerSystem: {(hungerSystem != null ? "FOUND" : "NULL")}");
         Debug.Log($"  - Camera: {(playerCamera != null ? playerCamera.gameObject.name : "NULL")}");
     }
@@ -791,6 +828,17 @@ public class NetworkedPlayer : NetworkBehaviour
         if (AstronautHealth.Instance != null)
         {
             AstronautHealth.Instance.TakeDamage(damage);
+
+            // Show enemy HP bar to the alien (attacker)
+            // Alien player is !PlayerMovement.IsPlayerControlled
+            if (!PlayerMovement.IsPlayerControlled && GameUIManager.Instance != null)
+            {
+                GameUIManager.Instance.ShowEnemyHP(
+                    AstronautHealth.Instance.currentHealth,
+                    AstronautHealth.Instance.maxHealth,
+                    "ASTRONAUT"
+                );
+            }
         }
     }
 
@@ -815,6 +863,12 @@ public class NetworkedPlayer : NetworkBehaviour
                 if (alienHealth != null)
                 {
                     alienHealth.TakeDamage(damage);
+
+                    // Show enemy HP bar to the astronaut (attacker)
+                    if (PlayerMovement.IsPlayerControlled && GameUIManager.Instance != null)
+                    {
+                        GameUIManager.Instance.ShowEnemyHP(alienHealth.currentHealth, alienHealth.maxHealth, "ALIEN");
+                    }
                 }
             }
         }

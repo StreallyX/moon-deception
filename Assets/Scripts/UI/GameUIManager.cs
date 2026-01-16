@@ -488,4 +488,143 @@ public void SetChaosMode(bool isChaos)
 
     Debug.Log($"[GameUIManager] Chaos mode: {isChaos}");
 }
+
+// ==================== ENEMY HP BAR ====================
+// Shows enemy HP when they take damage (visible to attacker)
+
+private GameObject enemyHPBarPanel;
+private Slider enemyHPSlider;
+private Image enemyHPBarFill;
+private Text enemyHPLabel;
+private float enemyHPShowTimer = 0f;
+private float enemyHPShowDuration = 3f;
+
+void CreateEnemyHPBar()
+{
+    if (mainCanvas == null) return;
+
+    // Create panel at top center
+    enemyHPBarPanel = new GameObject("EnemyHPBarPanel");
+    enemyHPBarPanel.transform.SetParent(mainCanvas.transform, false);
+
+    RectTransform panelRect = enemyHPBarPanel.AddComponent<RectTransform>();
+    panelRect.anchorMin = new Vector2(0.5f, 1f);
+    panelRect.anchorMax = new Vector2(0.5f, 1f);
+    panelRect.pivot = new Vector2(0.5f, 1f);
+    panelRect.anchoredPosition = new Vector2(0, -20);
+    panelRect.sizeDelta = new Vector2(300, 40);
+
+    // Background
+    Image bgImage = enemyHPBarPanel.AddComponent<Image>();
+    bgImage.color = new Color(0.1f, 0.1f, 0.1f, 0.9f);
+
+    // Label
+    GameObject labelObj = new GameObject("EnemyHPLabel");
+    labelObj.transform.SetParent(enemyHPBarPanel.transform, false);
+    RectTransform labelRect = labelObj.AddComponent<RectTransform>();
+    labelRect.anchorMin = Vector2.zero;
+    labelRect.anchorMax = new Vector2(1f, 0.4f);
+    labelRect.offsetMin = Vector2.zero;
+    labelRect.offsetMax = Vector2.zero;
+
+    enemyHPLabel = labelObj.AddComponent<Text>();
+    enemyHPLabel.text = "ENNEMI";
+    enemyHPLabel.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+    enemyHPLabel.fontSize = 14;
+    enemyHPLabel.alignment = TextAnchor.MiddleCenter;
+    enemyHPLabel.color = Color.white;
+
+    // Slider background
+    GameObject sliderBg = new GameObject("SliderBg");
+    sliderBg.transform.SetParent(enemyHPBarPanel.transform, false);
+    RectTransform sliderBgRect = sliderBg.AddComponent<RectTransform>();
+    sliderBgRect.anchorMin = new Vector2(0.05f, 0.45f);
+    sliderBgRect.anchorMax = new Vector2(0.95f, 0.9f);
+    sliderBgRect.offsetMin = Vector2.zero;
+    sliderBgRect.offsetMax = Vector2.zero;
+
+    Image sliderBgImage = sliderBg.AddComponent<Image>();
+    sliderBgImage.color = new Color(0.3f, 0.3f, 0.3f, 1f);
+
+    // Slider
+    GameObject sliderObj = new GameObject("EnemyHPSlider");
+    sliderObj.transform.SetParent(enemyHPBarPanel.transform, false);
+    RectTransform sliderRect = sliderObj.AddComponent<RectTransform>();
+    sliderRect.anchorMin = new Vector2(0.05f, 0.45f);
+    sliderRect.anchorMax = new Vector2(0.95f, 0.9f);
+    sliderRect.offsetMin = Vector2.zero;
+    sliderRect.offsetMax = Vector2.zero;
+
+    enemyHPSlider = sliderObj.AddComponent<Slider>();
+    enemyHPSlider.minValue = 0;
+    enemyHPSlider.maxValue = 100;
+    enemyHPSlider.value = 100;
+    enemyHPSlider.interactable = false;
+
+    // Fill area
+    GameObject fillArea = new GameObject("FillArea");
+    fillArea.transform.SetParent(sliderObj.transform, false);
+    RectTransform fillAreaRect = fillArea.AddComponent<RectTransform>();
+    fillAreaRect.anchorMin = Vector2.zero;
+    fillAreaRect.anchorMax = Vector2.one;
+    fillAreaRect.offsetMin = Vector2.zero;
+    fillAreaRect.offsetMax = Vector2.zero;
+
+    // Fill
+    GameObject fill = new GameObject("Fill");
+    fill.transform.SetParent(fillArea.transform, false);
+    RectTransform fillRect = fill.AddComponent<RectTransform>();
+    fillRect.anchorMin = Vector2.zero;
+    fillRect.anchorMax = Vector2.one;
+    fillRect.offsetMin = Vector2.zero;
+    fillRect.offsetMax = Vector2.zero;
+
+    enemyHPBarFill = fill.AddComponent<Image>();
+    enemyHPBarFill.color = Color.red;
+
+    enemyHPSlider.fillRect = fillRect;
+
+    enemyHPBarPanel.SetActive(false);
+}
+
+/// <summary>
+/// Show enemy HP bar with current values (called when enemy takes damage)
+/// </summary>
+public void ShowEnemyHP(float currentHP, float maxHP, string enemyName = "ENNEMI")
+{
+    if (enemyHPBarPanel == null)
+    {
+        CreateEnemyHPBar();
+    }
+
+    if (enemyHPBarPanel != null)
+    {
+        enemyHPBarPanel.SetActive(true);
+        enemyHPSlider.maxValue = maxHP;
+        enemyHPSlider.value = currentHP;
+
+        float percent = currentHP / maxHP;
+        enemyHPBarFill.color = Color.Lerp(Color.red, Color.green, percent);
+
+        if (enemyHPLabel != null)
+        {
+            enemyHPLabel.text = $"{enemyName} - {currentHP:F0}/{maxHP:F0}";
+        }
+
+        enemyHPShowTimer = enemyHPShowDuration;
+    }
+}
+
+void Update()
+{
+    // Auto-hide enemy HP bar after duration
+    if (enemyHPShowTimer > 0)
+    {
+        enemyHPShowTimer -= Time.deltaTime;
+        if (enemyHPShowTimer <= 0 && enemyHPBarPanel != null)
+        {
+            enemyHPBarPanel.SetActive(false);
+        }
+    }
+}
 }

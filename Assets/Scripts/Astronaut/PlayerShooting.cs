@@ -278,8 +278,39 @@ public class PlayerShooting : MonoBehaviour
             if (damageable != null)
             {
                 bool wasKill = npc != null || alienHealth != null;
+                bool isAlien = alienController != null || alienHealth != null || (npc != null && npc.IsAlien);
 
-                damageable.TakeDamage(damage);
+                // MULTIPLAYER: Sync damage via RPC for aliens
+                if (isAlien && alienHealth != null)
+                {
+                    // Check if alien has NetworkObject for multiplayer sync
+                    var alienNetObj = alienHealth.GetComponent<Unity.Netcode.NetworkObject>();
+                    if (alienNetObj != null && alienNetObj.IsSpawned && NetworkAudioManager.Instance != null)
+                    {
+                        // Use RPC to sync damage to all clients
+                        var player = FindAnyNetworkedPlayer();
+                        if (player != null)
+                        {
+                            player.AstronautShootAlienServerRpc(alienNetObj.NetworkObjectId, damage);
+                            Debug.Log($"[Shooting] Sent damage RPC for alien {alienNetObj.NetworkObjectId}");
+                        }
+                        else
+                        {
+                            // Fallback: local damage
+                            damageable.TakeDamage(damage);
+                        }
+                    }
+                    else
+                    {
+                        // Single player or no network - local damage
+                        damageable.TakeDamage(damage);
+                    }
+                }
+                else
+                {
+                    // NPCs and other targets - local damage is fine
+                    damageable.TakeDamage(damage);
+                }
 
                 if (showHitMarker)
                 {
@@ -301,7 +332,7 @@ public class PlayerShooting : MonoBehaviour
                 // Handle stress changes
                 if (StressSystem.Instance != null)
                 {
-                    if (alienController != null || alienHealth != null || (npc != null && npc.IsAlien))
+                    if (isAlien)
                     {
                         // Hit an alien - reduce stress
                         StressSystem.Instance.ReduceStress(10f);
@@ -585,6 +616,28 @@ public class PlayerShooting : MonoBehaviour
         {
             Destroy(hitMarkerTexture);
         }
+    }
+
+    /// <summary>
+    /// Find any NetworkedPlayer to send RPCs through
+    /// </summary>
+    NetworkedPlayer FindAnyNetworkedPlayer()
+    {
+        if (Unity.Netcode.NetworkManager.Singleton == null) return null;
+
+        foreach (var client in Unity.Netcode.NetworkManager.Singleton.ConnectedClientsList)
+        {
+            if (client.PlayerObject != null)
+            {
+                var networkedPlayer = client.PlayerObject.GetComponent<NetworkedPlayer>();
+                if (networkedPlayer != null && networkedPlayer.IsSpawned)
+                {
+                    return networkedPlayer;
+                }
+            }
+        }
+
+        return FindObjectOfType<NetworkedPlayer>();
     }
 }
 
