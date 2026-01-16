@@ -86,19 +86,28 @@ public class SpawnManager : MonoBehaviour
 
     /// <summary>
     /// Called by NetworkGameManager when server says world is ready.
-    /// Client can now safely spawn local entities.
+    /// Both server and client spawn local entities (interactables, defense zones).
+    /// NPCs are handled separately by NetworkSpawnManager (server only, synced via Netcode).
     /// </summary>
     public void OnWorldReady()
     {
         Debug.Log("[SpawnManager] OnWorldReady called!");
 
+        bool isServer = NetworkManager.Singleton != null && NetworkManager.Singleton.IsServer;
         bool isClient = NetworkManager.Singleton != null &&
                        NetworkManager.Singleton.IsClient &&
                        !NetworkManager.Singleton.IsServer;
 
-        if (isClient)
+        if (isServer)
+        {
+            // Server/Host: spawn interactables and defense zones (NPCs handled by NetworkSpawnManager)
+            Debug.Log("[SpawnManager] SERVER: Spawning interactables and defense zones...");
+            StartCoroutine(SpawnServerEntities());
+        }
+        else if (isClient)
         {
             // Client: spawn local entities now that world is ready
+            Debug.Log("[SpawnManager] CLIENT: Spawning local interactables...");
             StartCoroutine(SpawnClientEntities());
         }
         else if (NetworkManager.Singleton == null)
@@ -106,12 +115,44 @@ public class SpawnManager : MonoBehaviour
             // Single player
             SpawnAllEntities();
         }
-        // Server doesn't need to do anything here - it already spawned via NetworkSpawnManager
+    }
+
+    System.Collections.IEnumerator SpawnServerEntities()
+    {
+        Debug.Log("[SpawnManager] SERVER: Setting up interactables...");
+
+        // Wait for zones to be ready
+        float timeout = 5f;
+        float elapsed = 0f;
+        while ((MapManager.Instance == null || MapManager.Instance.ZoneCount == 0) && elapsed < timeout)
+        {
+            yield return new WaitForSeconds(0.2f);
+            elapsed += 0.2f;
+        }
+
+        if (MapManager.Instance == null || MapManager.Instance.ZoneCount == 0)
+        {
+            Debug.LogError("[SpawnManager] SERVER: No zones found! Cannot spawn interactables.");
+            yield break;
+        }
+
+        Debug.Log($"[SpawnManager] SERVER: Found {MapManager.Instance.ZoneCount} zones");
+
+        // Spawn defense zones and interactables
+        if (!hasSpawnedInteractables)
+        {
+            hasSpawnedInteractables = true;
+            SpawnDefenseZones();
+            SpawnInteractables();
+            Debug.Log("[SpawnManager] SERVER: Interactables spawned!");
+        }
+
+        OnSpawningComplete?.Invoke();
     }
 
     System.Collections.IEnumerator SpawnClientEntities()
     {
-        Debug.Log("[SpawnManager] CLIENT: Setting up local view...");
+        Debug.Log("[SpawnManager] CLIENT: Setting up local interactables...");
 
         // Reset flags
         ResetSpawnFlags();
@@ -190,16 +231,34 @@ public class SpawnManager : MonoBehaviour
 
             if (isClientOnly)
             {
-                // Pure client: wait for WorldReady signal from server
-                Debug.Log("[SpawnManager] CLIENT mode - waiting for WorldReady signal from server...");
+                // Pure client: wait for zones to be ready, then spawn interactables
+                Debug.Log("[SpawnManager] CLIENT mode - waiting for zones to be ready...");
 
-                // Check if world is already ready (we joined late)
-                if (NetworkGameManager.Instance != null && NetworkGameManager.Instance.IsWorldReady)
+                // Wait for MapManager and zones
+                float zoneTimeout = 10f;
+                float zoneElapsed = 0f;
+                while (zoneElapsed < zoneTimeout)
                 {
-                    Debug.Log("[SpawnManager] CLIENT: World already ready!");
-                    OnWorldReady();
+                    if (MapManager.Instance != null && MapManager.Instance.ZoneCount > 0)
+                    {
+                        Debug.Log($"[SpawnManager] CLIENT: Zones ready! ({MapManager.Instance.ZoneCount} zones)");
+                        break;
+                    }
+                    yield return new WaitForSeconds(0.5f);
+                    zoneElapsed += 0.5f;
+                    Debug.Log($"[SpawnManager] CLIENT: Waiting for zones... ({zoneElapsed}s)");
                 }
-                // Otherwise, WorldReady will be called via ClientRpc when server is ready
+
+                // Spawn interactables locally (same positions as server due to deterministic seeding)
+                if (MapManager.Instance != null && MapManager.Instance.ZoneCount > 0)
+                {
+                    Debug.Log("[SpawnManager] CLIENT: Spawning local interactables...");
+                    yield return StartCoroutine(SpawnClientEntities());
+                }
+                else
+                {
+                    Debug.LogError("[SpawnManager] CLIENT: No zones found after timeout!");
+                }
                 yield break;
             }
         }
@@ -556,6 +615,9 @@ public class SpawnManager : MonoBehaviour
             return;
         }
 
+        // DETERMINISTIC: Use zone name as seed for consistent positions across server/client
+        int seed = zone.zoneName.GetHashCode();
+        Random.InitState(seed);
         ShuffleList(spawnPoints);
 
         int pointIndex = 0;
@@ -587,6 +649,9 @@ public class SpawnManager : MonoBehaviour
             }
             pointIndex++;
         }
+
+        // Reset random state
+        Random.InitState((int)System.DateTime.Now.Ticks);
 
         Debug.Log($"[SpawnManager] Zone '{zone.zoneName}': spawned interactables");
     }

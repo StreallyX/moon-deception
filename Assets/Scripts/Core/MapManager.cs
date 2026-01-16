@@ -1,9 +1,11 @@
 using UnityEngine;
+using Unity.Netcode;
 using System.Collections.Generic;
 
 /// <summary>
 /// Central manager for all map zones.
 /// Handles zone registration, queries, and spawn point management.
+/// NETWORK-AWARE: Only SERVER can create zones. Clients just find existing ones.
 /// </summary>
 public class MapManager : MonoBehaviour
 {
@@ -28,6 +30,12 @@ public class MapManager : MonoBehaviour
     public List<MapZone> AllZones => allZones;
     public int ZoneCount => allZones.Count;
 
+    // Network helpers
+    private bool IsServer => NetworkManager.Singleton != null && NetworkManager.Singleton.IsServer;
+    private bool IsClient => NetworkManager.Singleton != null && NetworkManager.Singleton.IsClient;
+    private bool IsNetworked => NetworkManager.Singleton != null &&
+                               (NetworkManager.Singleton.IsServer || NetworkManager.Singleton.IsClient);
+
     void Awake()
     {
         if (Instance == null)
@@ -44,47 +52,82 @@ public class MapManager : MonoBehaviour
 
     void Start()
     {
-        // Auto-find all zones in the scene if none registered yet
-        StartCoroutine(AutoFindZones());
+        // Wait for network to be ready before initializing
+        StartCoroutine(WaitForNetworkAndInitialize());
     }
 
-    System.Collections.IEnumerator AutoFindZones()
+    System.Collections.IEnumerator WaitForNetworkAndInitialize()
     {
-        // Wait for zones to register themselves
-        yield return new WaitForSeconds(0.5f);
+        Debug.Log("[MapManager] Waiting for network to be ready...");
 
-        // If no zones registered, find them manually
-        if (allZones.Count == 0)
+        // Wait for NetworkManager to exist
+        float timeout = 10f;
+        float elapsed = 0f;
+        while (NetworkManager.Singleton == null && elapsed < timeout)
         {
-            Debug.Log("[MapManager] No zones registered, searching scene...");
-            FindAllZonesInScene();
+            yield return new WaitForSeconds(0.1f);
+            elapsed += 0.1f;
         }
 
-        // If still no zones, create default zones
-        if (allZones.Count == 0)
+        // Wait for network to start (Host/Client)
+        elapsed = 0f;
+        while (!IsNetworked && elapsed < timeout)
         {
-            Debug.Log("[MapManager] No zones found - creating default zones...");
-            CreateDefaultZones();
+            yield return new WaitForSeconds(0.1f);
+            elapsed += 0.1f;
         }
 
-        Debug.Log($"[MapManager] Total zones registered: {allZones.Count}");
-        foreach (var zone in allZones)
+        if (!IsNetworked)
         {
-            if (zone != null)
-            {
-                Debug.Log($"  - {zone.zoneName} ({zone.zoneType})");
-            }
+            Debug.Log("[MapManager] Not in networked mode - initializing for single player");
+            yield return StartCoroutine(InitializeZones(allowCreate: true));
+            yield break;
         }
+
+        Debug.Log($"[MapManager] Network ready! IsServer={IsServer}, IsClient={IsClient}");
+
+        // Initialize zones based on role
+        // SERVER: Can create zones if needed
+        // CLIENT: Only find existing zones (they're scene objects, identical on all machines)
+        yield return StartCoroutine(InitializeZones(allowCreate: IsServer));
+    }
+
+    System.Collections.IEnumerator InitializeZones(bool allowCreate)
+    {
+        Debug.Log($"[MapManager] InitializeZones - IsServer={IsServer}, IsClient={IsClient}");
+
+        // Wait a moment for scene to be fully loaded
+        yield return new WaitForSeconds(0.3f);
+
+        // First, try to find zones already in the scene
+        FindAllZonesInScene();
+
+        if (allZones.Count > 0)
+        {
+            Debug.Log($"[MapManager] Found {allZones.Count} zones in scene - using those");
+            LogAllZones();
+            yield break;
+        }
+
+        // No zones in scene - BOTH server and client create identical local zones!
+        // Zones are just configuration data (spawn points, boundaries) - not gameplay objects.
+        // They must be identical on all machines for spawn positions to match.
+        Debug.Log($"[MapManager] No zones in scene - creating default zones locally...");
+        CreateDefaultZonesLocal();
+
+        LogAllZones();
     }
 
     /// <summary>
-    /// Create default zones if none exist in the scene
+    /// Create default zones as LOCAL objects (not networked).
+    /// These are configuration data - spawn points, boundaries, etc.
+    /// Both server AND client create the same zones for consistency.
     /// </summary>
-    public void CreateDefaultZones()
+    void CreateDefaultZonesLocal()
     {
-        Debug.Log("[MapManager] Creating default zones...");
+        Debug.Log("[MapManager] Creating default zones (local)...");
 
-        // Create 4 zones in a grid pattern
+        // Create 4 zones in a grid pattern - DETERMINISTIC positions
         Vector3[] zonePositions = new Vector3[]
         {
             new Vector3(-30f, 0f, 30f),   // Habitat
@@ -126,7 +169,7 @@ public class MapManager : MonoBehaviour
             col.center = new Vector3(0f, 5f, 0f);
             col.isTrigger = true;
 
-            // Create spawn points as child objects
+            // Create spawn points as child objects - DETERMINISTIC positions
             zone.npcSpawnPoints = new Transform[5];
             for (int j = 0; j < 5; j++)
             {
@@ -137,7 +180,24 @@ public class MapManager : MonoBehaviour
                 zone.npcSpawnPoints[j] = spawnPoint.transform;
             }
 
-            // Create patrol waypoints
+            // Create interactable spawn points - DETERMINISTIC positions
+            zone.interactableSpawnPoints = new Transform[4];
+            Vector3[] interactableOffsets = new Vector3[]
+            {
+                new Vector3(-12f, 1f, 12f),
+                new Vector3(12f, 1f, 12f),
+                new Vector3(-12f, 1f, -12f),
+                new Vector3(12f, 1f, -12f)
+            };
+            for (int j = 0; j < 4; j++)
+            {
+                GameObject interactPoint = new GameObject($"InteractSpawn_{j + 1}");
+                interactPoint.transform.SetParent(zoneObj.transform);
+                interactPoint.transform.localPosition = interactableOffsets[j];
+                zone.interactableSpawnPoints[j] = interactPoint.transform;
+            }
+
+            // Create patrol waypoints - DETERMINISTIC positions
             zone.patrolWaypoints = new Transform[4];
             Vector3[] patrolOffsets = new Vector3[]
             {
@@ -161,20 +221,46 @@ public class MapManager : MonoBehaviour
         }
     }
 
+    void LogAllZones()
+    {
+        Debug.Log($"[MapManager] Total zones: {allZones.Count}");
+        foreach (var zone in allZones)
+        {
+            if (zone != null)
+            {
+                Debug.Log($"  - {zone.zoneName} ({zone.zoneType}) at {zone.transform.position}");
+            }
+        }
+    }
+
+    /// <summary>
+    /// Public method to create default zones - for external callers.
+    /// Calls the local zone creation method.
+    /// </summary>
+    public void CreateDefaultZones()
+    {
+        if (allZones.Count > 0)
+        {
+            Debug.Log("[MapManager] Zones already exist, skipping creation");
+            return;
+        }
+        CreateDefaultZonesLocal();
+    }
+
     /// <summary>
     /// Find all MapZone components in the scene and register them
     /// </summary>
     public void FindAllZonesInScene()
     {
         MapZone[] zones = FindObjectsOfType<MapZone>(true); // true = include inactive
-        Debug.Log($"[MapManager] Found {zones.Length} zones in scene");
+        Debug.Log($"[MapManager] Found {zones.Length} MapZone objects in scene");
 
         foreach (var zone in zones)
         {
             if (!allZones.Contains(zone))
             {
                 allZones.Add(zone);
-                Debug.Log($"[MapManager] Auto-registered zone: {zone.zoneName} ({zone.zoneType})");
+                Debug.Log($"[MapManager] Registered zone: {zone.zoneName} ({zone.zoneType})");
             }
         }
     }
@@ -184,7 +270,7 @@ public class MapManager : MonoBehaviour
     /// </summary>
     public void RefreshZones()
     {
-        Debug.Log("[MapManager] Refreshing zones - clearing stale references...");
+        Debug.Log("[MapManager] Refreshing zones...");
 
         // Remove null/destroyed zone references
         allZones.RemoveAll(z => z == null);
