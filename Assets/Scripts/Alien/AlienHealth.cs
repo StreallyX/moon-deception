@@ -123,7 +123,7 @@ public class AlienHealth : MonoBehaviour, IDamageable
         // Play death sound
         if (AudioManager.Instance != null)
         {
-            AudioManager.Instance.PlayNPCDeath(transform.position);
+            AudioManager.Instance.PlayAlienKilled();
         }
 
         // Disable alien controls

@@ -284,7 +284,7 @@ public class AlienTransformation : MonoBehaviour
         // Play attack sound
         if (AudioManager.Instance != null)
         {
-            AudioManager.Instance.PlaySFX(AudioManager.Instance.bulletImpactFlesh);
+            AudioManager.Instance.PlayAlienAttack();
         }
 
         // Attack animation

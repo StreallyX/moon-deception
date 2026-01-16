@@ -15,8 +15,10 @@ public class HungerSystem : MonoBehaviour
     public float maxHunger = 100f;
     public float currentHunger = 100f;
     public float hungerDecayRate = 2f;
-    public float coffeeDecayMultiplier = 1.5f;
-    public float coffeeRestoreAmount = 10f;
+    public float coffeeRestoreAmount = 25f;      // Immediate hunger restore
+    public float coffeeDecayBonus = 0.5f;        // Each coffee adds +0.5x to decay
+    public float maxDecayMultiplier = 5f;        // Cap at 5x decay speed
+    public float coffeeEffectDuration = 15f;     // How long each coffee stack lasts
     public float eatRestoreAmount = 40f;
 
     [Header("Starving Effects")]
@@ -31,7 +33,7 @@ public class HungerSystem : MonoBehaviour
 
     private float currentDecayMultiplier = 1f;
     private float coffeeEffectTimer = 0f;
-    private float coffeeEffectDuration = 10f;
+    private int coffeeStacks = 0;
 
     private bool isStarving = false;
     private float lastStarvingSound = 0f;
@@ -107,13 +109,21 @@ public class HungerSystem : MonoBehaviour
 
     void Update()
     {
-        // Coffee effect decay
+        // Coffee effect decay - timer counts down, when it hits 0 remove one stack
         if (coffeeEffectTimer > 0)
         {
             coffeeEffectTimer -= Time.deltaTime;
-            if (coffeeEffectTimer <= 0)
+            if (coffeeEffectTimer <= 0 && coffeeStacks > 0)
             {
-                currentDecayMultiplier = 1f;
+                coffeeStacks--;
+                if (coffeeStacks > 0)
+                {
+                    // More stacks remain, reset timer
+                    coffeeEffectTimer = coffeeEffectDuration;
+                }
+                // Recalculate multiplier
+                currentDecayMultiplier = 1f + (coffeeStacks * coffeeDecayBonus);
+                Debug.Log($"[HungerSystem] Coffee stack expired. Stacks: {coffeeStacks}, Multiplier: {currentDecayMultiplier:F1}x");
             }
         }
 
@@ -208,9 +218,8 @@ public class HungerSystem : MonoBehaviour
     {
         if (AudioManager.Instance != null)
         {
-            // Play a growling/hungry sound
-            // Using existing sounds as placeholder
-            AudioManager.Instance.PlaySFX3D(AudioManager.Instance.npcDeath, transform.position, 0.5f);
+            // Play alien growl sound when starving
+            AudioManager.Instance.PlayAlienGrowl(transform.position);
         }
 
         // Also stress the astronaut if nearby (they hear the alien sounds)
@@ -293,11 +302,22 @@ public class HungerSystem : MonoBehaviour
 
     public void DrinkCoffee()
     {
+        // Immediate hunger restore (the benefit)
         currentHunger = Mathf.Min(currentHunger + coffeeRestoreAmount, maxHunger);
-        currentDecayMultiplier = coffeeDecayMultiplier;
+
+        // Add a coffee stack - increases hunger decay (the cost)
+        coffeeStacks++;
+        currentDecayMultiplier = 1f + (coffeeStacks * coffeeDecayBonus);
+        currentDecayMultiplier = Mathf.Min(currentDecayMultiplier, maxDecayMultiplier);
+
+        // Reset/extend timer
         coffeeEffectTimer = coffeeEffectDuration;
-        Debug.Log($"[HungerSystem] Drank coffee. Hunger: {currentHunger}, Decay multiplier: {currentDecayMultiplier}");
+
+        Debug.Log($"[HungerSystem] Drank coffee! +{coffeeRestoreAmount} hunger, but decay now {currentDecayMultiplier:F1}x faster!");
     }
+
+    public int CoffeeStacks => coffeeStacks;
+    public float DecayMultiplier => currentDecayMultiplier;
 
     public void Eat()
     {
@@ -318,6 +338,19 @@ public class HungerSystem : MonoBehaviour
         // Don't show UI if disabled (chaos mode) or not controlled
         if (!enabled) return;
         if (!AlienController.IsAlienControlled) return;
+
+        // Show coffee stacks warning
+        if (coffeeStacks > 0)
+        {
+            GUIStyle coffeeStyle = new GUIStyle(GUI.skin.label);
+            coffeeStyle.fontSize = 16;
+            coffeeStyle.fontStyle = FontStyle.Bold;
+            coffeeStyle.alignment = TextAnchor.MiddleRight;
+            coffeeStyle.normal.textColor = new Color(0.6f, 0.4f, 0.2f);
+
+            GUI.Label(new Rect(Screen.width - 220, 120, 200, 25),
+                $"Coffee x{coffeeStacks} ({currentDecayMultiplier:F1}x decay)", coffeeStyle);
+        }
 
         // Show warning when low hunger
         if (currentHunger < maxHunger * 0.3f)

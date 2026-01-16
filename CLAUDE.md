@@ -79,7 +79,10 @@ Subscribe in Start() with null check + LateSubscribe coroutine fallback.
 
 ### Interactables
 Base class: `Interactable.cs` - proximity detection, cooldowns, role filtering
-- `CoffeeMachine.cs` - Alien-only, +40 hunger, 10s cooldown
+- `CoffeeMachine.cs` - Alien-only, INCREASES hunger decay (stacks!), 10s cooldown
+  - Each coffee adds +0.5x to decay multiplier (max 5x)
+  - Stacks expire after 15s each
+  - Strategic risk: blend in by drinking coffee, but starve faster
 - `AlarmTerminal.cs` - Alien-only, +10 stress (if astronaut in 30m), panics NPCs
 
 ### Spawn System
@@ -146,17 +149,21 @@ if (GameManager.Instance != null) {
 
 ## Audio Setup
 
-AudioManager loads from `Resources/Audio/` folder:
+AudioManager auto-loads from `Resources/Audio/` folder (22 files):
 ```
 Assets/Resources/Audio/
-├── gunshot.wav
-├── impact_flesh.wav
-├── impact_metal.wav
-├── ui_click.wav
-├── alarm.wav
-└── alien_reveal.wav
+├── gunshot.wav, minigun.wav, reload.wav     # Weapons
+├── impact_metal.wav, impact_concrete.wav    # Impacts
+├── npc_death.wav, npc_panic.wav             # NPCs
+├── alien_reveal.wav, alien_growl.wav        # Alien
+├── alien_attack.wav, alien_killed.wav
+├── ambient_station.wav, ambient_chaos.wav   # Ambient loops
+├── alarm.wav, heartbeat.wav
+├── power_down.wav, lights_emergency.wav     # Chaos events
+├── victory_stinger.wav, defeat_stinger.wav  # Game end
+├── coffee_machine.wav, alarm_trigger.wav    # Interactables
+└── terminal_beep.wav
 ```
-See `AUDIO_GUIDE.md` for full list.
 
 ## File Structure
 
@@ -203,8 +210,8 @@ Assets/Scripts/
 Track in `DEV_TRACKER.md`:
 - **Phase 1**: Solo Astronaut FPS ✅
 - **Phase 2**: Solo Alien TPS ✅
-- **Phase 3**: Map & Gameplay Loop - CODE DONE, needs Unity scene setup
-- **Phase 4**: Multiplayer - Netcode for GameObjects (TODO)
+- **Phase 3**: Map & Gameplay Loop ✅
+- **Phase 4**: Multiplayer - Netcode for GameObjects (NEXT)
 - **Phase 5**: Steam Integration - Steamworks.NET (TODO)
 
 ## Known Patterns

@@ -60,11 +60,21 @@ public class NPCBehavior : MonoBehaviour, IDamageable
     {
         startPosition = transform.position;
         animator = GetComponent<Animator>();
+
+        // Get or create CharacterController
         characterController = GetComponent<CharacterController>();
-        
+        if (characterController == null)
+        {
+            characterController = gameObject.AddComponent<CharacterController>();
+            // Only set defaults for newly created CC
+            characterController.center = new Vector3(0, 1f, 0);
+            characterController.height = 2f;
+            characterController.radius = 0.4f;
+        }
+
         idleTimer = Random.Range(idleTimeMin, idleTimeMax);
         SetState(NPCState.Idle);
-        
+
         Debug.Log($"[NPC] {npcName} initialized at {startPosition}. Waypoints: {waypoints.Count}, AutoPatrol: {autoPatrol}");
     }
 
@@ -73,6 +83,9 @@ public class NPCBehavior : MonoBehaviour, IDamageable
         if (currentState == NPCState.Dead) return;
 
         stateTimer += Time.deltaTime;
+
+        // Apply gravity
+        ApplyGravity();
 
         switch (currentState)
         {
@@ -88,6 +101,15 @@ public class NPCBehavior : MonoBehaviour, IDamageable
             case NPCState.Panicking:
                 HandlePanickingState();
                 break;
+        }
+    }
+
+    private void ApplyGravity()
+    {
+        // Simple approach: lock Y to start position (NPCs stay on their floor)
+        if (Mathf.Abs(transform.position.y - startPosition.y) > 0.1f)
+        {
+            transform.position = new Vector3(transform.position.x, startPosition.y, transform.position.z);
         }
     }
 
@@ -245,6 +267,12 @@ public class NPCBehavior : MonoBehaviour, IDamageable
         if (currentState != NPCState.Dead)
         {
             SetState(NPCState.Panicking);
+
+            // Play panic sound
+            if (AudioManager.Instance != null)
+            {
+                AudioManager.Instance.PlayNPCPanic(transform.position);
+            }
         }
     }
 
@@ -269,6 +297,12 @@ public class NPCBehavior : MonoBehaviour, IDamageable
     {
         SetState(NPCState.Dead);
         Debug.Log($"[NPC] {npcName} died! IsAlien: {isAlien}");
+
+        // Play death sound
+        if (AudioManager.Instance != null)
+        {
+            AudioManager.Instance.PlayNPCDeath(transform.position);
+        }
 
         var gameManager = FindObjectOfType<GameManager>();
         if (gameManager != null)

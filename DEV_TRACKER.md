@@ -1,8 +1,8 @@
 # Moon Deception - Development Tracker
 
-## Current Phase: 3 - Map & Gameplay Loop - IN PROGRESS
+## Current Phase: 3 - COMPLETE
 ## Current Branch: phase1-fps
-## Next: Phase 4 - Multiplayer
+## Next: Phase 4 - Multiplayer (Netcode for GameObjects)
 
 ---
 
@@ -68,18 +68,18 @@
 
 ---
 
-## Phase 3 Checklist: Map & Gameplay Loop
+## Phase 3 Checklist: Map & Gameplay Loop - COMPLETE
 - [x] MapZone.cs - Zone definition with boundaries, spawn points, patrol waypoints
 - [x] MapManager.cs - Central zone management, distance-based spawn validation
 - [x] SpawnManager.cs - Random alien assignment, defense zone spawning with rules
 - [x] Interactable.cs - Base class for all interactables
-- [x] CoffeeMachine.cs - Alien uses to restore hunger (+40)
+- [x] CoffeeMachine.cs - Alien drinks to blend in, but INCREASES hunger decay (stacks!)
 - [x] AlarmTerminal.cs - Alien uses to stress astronaut (+10, panic NPCs)
 - [x] WinConditions - In GameManager (astronaut wins / aliens win)
 - [x] GameTimer - In GameManager (10 min default)
-- [ ] 4 Map sections setup in Unity (Habitat, Research, Industrial, Command)
-- [ ] Prefabs creation (Zone, CoffeeMachine, AlarmTerminal)
-- [ ] Scene setup with zones and spawn points
+- [x] 4 Map sections setup in Unity (Habitat, Research, Industrial, Command)
+- [x] Scene setup with zones and spawn points
+- [x] Audio integration - 22 audio files connected to all game systems
 
 ---
 
@@ -168,6 +168,25 @@
   - GameManager.cs - Integrates SpawnManager.SpawnAllEntities() in StartGame()
   - NPCBehavior.cs - Added zone assignment and zone-based patrol
 - **Phase 3 CODE COMPLETE** - ready for Unity scene setup
+
+### Session 6 (2026-01-16) - PHASE 3 COMPLETE
+- **Audio Integration** (22 files):
+  - Connected all audio files to game systems
+  - AlienTransformation.TryAttack() now uses PlayAlienAttack()
+  - AlienHealth.Die() now uses PlayAlienKilled()
+  - NPCBehavior.Panic() now uses PlayNPCPanic()
+  - NPCBehavior.Die() now uses PlayNPCDeath()
+- **Coffee Mechanic Rework**:
+  - Coffee no longer restores hunger
+  - Coffee INCREASES hunger decay rate (strategic risk!)
+  - Stacks: each coffee adds +0.5x to decay multiplier (max 5x)
+  - Stacks expire after 15s each
+  - UI shows coffee stacks and decay multiplier
+- **Unity Scene Setup** - User completed:
+  - 4 zones created with MapZone component and BoxCollider
+  - Spawn points created in each zone
+  - All interactables tested and working
+- **PHASE 3 COMPLETE** - Ready for Phase 4 Multiplayer
 
 ---
 

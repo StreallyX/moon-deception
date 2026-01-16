@@ -7,7 +7,6 @@ using UnityEngine;
 public class CoffeeMachine : Interactable
 {
     [Header("Coffee Settings")]
-    public float hungerRestoreAmount = 40f;
     public float coffeeCooldown = 10f;
 
     [Header("Effects")]
@@ -121,18 +120,19 @@ public class CoffeeMachine : Interactable
         HungerSystem hunger = FindObjectOfType<HungerSystem>();
         if (hunger != null)
         {
-            hunger.AddHunger(hungerRestoreAmount);
+            hunger.DrinkCoffee();
             MarkAsUsed();
 
-            Debug.Log($"[CoffeeMachine] Alien drank coffee! +{hungerRestoreAmount} hunger");
+            Debug.Log($"[CoffeeMachine] Alien drank coffee! Decay: {hunger.DecayMultiplier:F1}x");
 
             // Visual effects
             PlayCoffeeEffects();
 
-            // Show feedback
+            // Show feedback - benefit AND cost
             if (GameUIManager.Instance != null)
             {
-                GameUIManager.Instance.ShowInteractionPrompt($"+{hungerRestoreAmount} Hunger!");
+                string feedback = $"+25 Hunger! (Decay: {hunger.DecayMultiplier:F1}x)";
+                GameUIManager.Instance.ShowInteractionPrompt(feedback);
             }
 
             // Hide prompt after short delay
@@ -152,10 +152,10 @@ public class CoffeeMachine : Interactable
             steamParticles.Play();
         }
 
-        // Play sound
+        // Play coffee machine sound
         if (AudioManager.Instance != null)
         {
-            AudioManager.Instance.PlayUIClick(); // Placeholder - ideally a coffee/liquid sound
+            AudioManager.Instance.PlayCoffeeMachine(transform.position);
         }
 
         // Flash light

@@ -146,10 +146,11 @@ public class AlarmTerminal : Interactable
 
         Debug.Log("[AlarmTerminal] ALARM TRIGGERED!");
 
-        // Play alarm sound
+        // Play alarm trigger sound
         if (AudioManager.Instance != null)
         {
-            AudioManager.Instance.PlayAlarm();
+            AudioManager.Instance.PlayTerminalBeep(transform.position);
+            AudioManager.Instance.PlayAlarmTrigger(transform.position);
         }
 
         // Show feedback

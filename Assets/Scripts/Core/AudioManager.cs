@@ -29,6 +29,7 @@ public class AudioManager : MonoBehaviour
 
     [Header("Gun Sounds")]
     public AudioClip gunShot;
+    public AudioClip gunShotMinigun;
     public AudioClip gunEmpty;
     public AudioClip gunReload;
 
@@ -43,6 +44,7 @@ public class AudioManager : MonoBehaviour
 
     [Header("Ambient Sounds")]
     public AudioClip ambientLoop;
+    public AudioClip ambientChaos;
     public AudioClip alarmSound;
     public AudioClip heartbeatLoop;
 
@@ -51,11 +53,26 @@ public class AudioManager : MonoBehaviour
     public AudioClip uiClick;
     public AudioClip uiBack;
 
-    [Header("Game Event Sounds")]
+    [Header("NPC Sounds")]
     public AudioClip npcDeath;
+    public AudioClip npcPanic;
+
+    [Header("Alien Sounds")]
     public AudioClip alienReveal;
+    public AudioClip alienGrowl;
+    public AudioClip alienAttack;
+    public AudioClip alienKilled;
+
+    [Header("Game Event Sounds")]
     public AudioClip victoryStinger;
     public AudioClip defeatStinger;
+    public AudioClip powerDown;
+    public AudioClip lightsEmergency;
+
+    [Header("Interactable Sounds")]
+    public AudioClip coffeeMachineSound;
+    public AudioClip alarmTrigger;
+    public AudioClip terminalBeep;
 
     void Awake()
     {
@@ -89,46 +106,108 @@ public class AudioManager : MonoBehaviour
     /// </summary>
     void LoadAudioFromResources()
     {
+        int loadedCount = 0;
+
         // Gun sounds
         if (gunShot == null)
-            gunShot = Resources.Load<AudioClip>("Audio/gunshot") ?? Resources.Load<AudioClip>("Audio/gunshot_pistol");
-        if (gunEmpty == null)
-            gunEmpty = Resources.Load<AudioClip>("Audio/empty_clip");
+            gunShot = Resources.Load<AudioClip>("Audio/gunshot");
+        if (gunShot != null) loadedCount++;
+
+        if (gunShotMinigun == null)
+            gunShotMinigun = Resources.Load<AudioClip>("Audio/minigun");
+        if (gunShotMinigun != null) loadedCount++;
+
         if (gunReload == null)
-            gunReload = Resources.Load<AudioClip>("Audio/reload_pistol");
+            gunReload = Resources.Load<AudioClip>("Audio/reload");
+        if (gunReload != null) loadedCount++;
 
         // Impact sounds
-        if (bulletImpactFlesh == null)
-            bulletImpactFlesh = Resources.Load<AudioClip>("Audio/impact_flesh");
         if (bulletImpactMetal == null)
             bulletImpactMetal = Resources.Load<AudioClip>("Audio/impact_metal");
+        if (bulletImpactMetal != null) loadedCount++;
+
         if (bulletImpactConcrete == null)
             bulletImpactConcrete = Resources.Load<AudioClip>("Audio/impact_concrete");
+        if (bulletImpactConcrete != null) loadedCount++;
 
-        // UI sounds
-        if (uiClick == null)
-            uiClick = Resources.Load<AudioClip>("Audio/ui_click");
-        if (uiHover == null)
-            uiHover = Resources.Load<AudioClip>("Audio/ui_hover");
-        if (uiBack == null)
-            uiBack = Resources.Load<AudioClip>("Audio/ui_back");
+        // Use impact_metal as fallback for flesh if not available
+        if (bulletImpactFlesh == null)
+            bulletImpactFlesh = Resources.Load<AudioClip>("Audio/impact_flesh") ?? bulletImpactMetal;
 
-        // Game events
-        if (npcDeath == null)
-            npcDeath = Resources.Load<AudioClip>("Audio/npc_death");
-        if (alienReveal == null)
-            alienReveal = Resources.Load<AudioClip>("Audio/alien_reveal");
+        // Ambient sounds
+        if (ambientLoop == null)
+            ambientLoop = Resources.Load<AudioClip>("Audio/ambient_station");
+        if (ambientLoop != null) loadedCount++;
+
+        if (ambientChaos == null)
+            ambientChaos = Resources.Load<AudioClip>("Audio/ambient_chaos");
+        if (ambientChaos != null) loadedCount++;
+
         if (alarmSound == null)
             alarmSound = Resources.Load<AudioClip>("Audio/alarm");
+        if (alarmSound != null) loadedCount++;
 
-        // Log what was loaded
-        int loadedCount = 0;
-        if (gunShot != null) loadedCount++;
-        if (bulletImpactFlesh != null) loadedCount++;
-        if (bulletImpactMetal != null) loadedCount++;
-        if (uiClick != null) loadedCount++;
+        if (heartbeatLoop == null)
+            heartbeatLoop = Resources.Load<AudioClip>("Audio/heartbeat");
+        if (heartbeatLoop != null) loadedCount++;
 
-        Debug.Log($"[AudioManager] Loaded {loadedCount} audio clips from Resources/Audio/");
+        // NPC sounds
+        if (npcDeath == null)
+            npcDeath = Resources.Load<AudioClip>("Audio/npc_death");
+        if (npcDeath != null) loadedCount++;
+
+        if (npcPanic == null)
+            npcPanic = Resources.Load<AudioClip>("Audio/npc_panic");
+        if (npcPanic != null) loadedCount++;
+
+        // Alien sounds
+        if (alienReveal == null)
+            alienReveal = Resources.Load<AudioClip>("Audio/alien_reveal");
+        if (alienReveal != null) loadedCount++;
+
+        if (alienGrowl == null)
+            alienGrowl = Resources.Load<AudioClip>("Audio/alien_growl");
+        if (alienGrowl != null) loadedCount++;
+
+        if (alienAttack == null)
+            alienAttack = Resources.Load<AudioClip>("Audio/alien_attack");
+        if (alienAttack != null) loadedCount++;
+
+        if (alienKilled == null)
+            alienKilled = Resources.Load<AudioClip>("Audio/alien_killed");
+        if (alienKilled != null) loadedCount++;
+
+        // Game event sounds
+        if (victoryStinger == null)
+            victoryStinger = Resources.Load<AudioClip>("Audio/victory_stinger");
+        if (victoryStinger != null) loadedCount++;
+
+        if (defeatStinger == null)
+            defeatStinger = Resources.Load<AudioClip>("Audio/defeat_stinger");
+        if (defeatStinger != null) loadedCount++;
+
+        if (powerDown == null)
+            powerDown = Resources.Load<AudioClip>("Audio/power_down");
+        if (powerDown != null) loadedCount++;
+
+        if (lightsEmergency == null)
+            lightsEmergency = Resources.Load<AudioClip>("Audio/lights_emergency");
+        if (lightsEmergency != null) loadedCount++;
+
+        // Interactable sounds
+        if (coffeeMachineSound == null)
+            coffeeMachineSound = Resources.Load<AudioClip>("Audio/coffee_machine");
+        if (coffeeMachineSound != null) loadedCount++;
+
+        if (alarmTrigger == null)
+            alarmTrigger = Resources.Load<AudioClip>("Audio/alarm_trigger");
+        if (alarmTrigger != null) loadedCount++;
+
+        if (terminalBeep == null)
+            terminalBeep = Resources.Load<AudioClip>("Audio/terminal_beep");
+        if (terminalBeep != null) loadedCount++;
+
+        Debug.Log($"[AudioManager] Loaded {loadedCount}/22 audio clips from Resources/Audio/");
     }
 
     void InitializeAudioSources()
@@ -254,20 +333,25 @@ public class AudioManager : MonoBehaviour
 
     // ==================== SPECIFIC SOUND METHODS ====================
 
-    public void PlayGunshot()
+    public void PlayGunshot(bool isMinigun = false)
     {
-        if (gunShot == null)
+        AudioClip clip = isMinigun && gunShotMinigun != null ? gunShotMinigun : gunShot;
+        if (clip == null)
         {
-            Debug.LogWarning("[AudioManager] gunShot clip is NOT assigned! Assign it in the Inspector.");
+            Debug.LogWarning("[AudioManager] gunShot clip is NOT assigned!");
             return;
         }
-        Debug.Log($"[AudioManager] Playing gunshot: {gunShot.name}");
-        PlaySFXWithPitch(gunShot, 0.95f, 1.05f, 1f);
+        PlaySFXWithPitch(clip, 0.95f, 1.05f, 1f);
     }
 
     public void PlayGunEmpty()
     {
         PlaySFX(gunEmpty);
+    }
+
+    public void PlayReload()
+    {
+        PlaySFX(gunReload);
     }
 
     public void PlayBulletImpact(string surfaceType, Vector3 position)
@@ -358,17 +442,58 @@ public class AudioManager : MonoBehaviour
         }
     }
 
-    // ==================== GAME EVENTS ====================
+    // ==================== NPC SOUNDS ====================
 
     public void PlayNPCDeath(Vector3 position)
     {
         PlaySFX3D(npcDeath, position);
     }
 
+    public void PlayNPCPanic(Vector3 position)
+    {
+        PlaySFX3D(npcPanic, position, 0.8f);
+    }
+
+    // ==================== ALIEN SOUNDS ====================
+
     public void PlayAlienReveal()
     {
         PlaySFX(alienReveal, 1.2f);
     }
+
+    public void PlayAlienGrowl(Vector3 position)
+    {
+        PlaySFX3D(alienGrowl, position, 0.7f);
+    }
+
+    public void PlayAlienAttack()
+    {
+        PlaySFX(alienAttack, 1f);
+    }
+
+    public void PlayAlienKilled()
+    {
+        PlaySFX(alienKilled, 1f);
+    }
+
+    // ==================== INTERACTABLE SOUNDS ====================
+
+    public void PlayCoffeeMachine(Vector3 position)
+    {
+        PlaySFX3D(coffeeMachineSound, position, 0.8f);
+    }
+
+    public void PlayAlarmTrigger(Vector3 position)
+    {
+        PlaySFX3D(alarmTrigger, position, 1f, 5f, 50f);
+    }
+
+    public void PlayTerminalBeep(Vector3 position)
+    {
+        PlaySFX3D(terminalBeep, position, 0.6f);
+    }
+
+    // ==================== GAME EVENTS ====================
 
     public void PlayVictory()
     {
@@ -380,6 +505,34 @@ public class AudioManager : MonoBehaviour
     {
         StopMusic();
         PlaySFX(defeatStinger);
+    }
+
+    public void PlayPowerDown()
+    {
+        PlaySFX(powerDown, 1f);
+    }
+
+    public void PlayLightsEmergency()
+    {
+        PlaySFX(lightsEmergency, 0.8f);
+    }
+
+    // ==================== CHAOS PHASE ====================
+
+    public void StartChaosAmbient()
+    {
+        if (ambientChaos != null)
+        {
+            PlayAmbient(ambientChaos);
+        }
+    }
+
+    public void StartNormalAmbient()
+    {
+        if (ambientLoop != null)
+        {
+            PlayAmbient(ambientLoop);
+        }
     }
 
     // ==================== VOLUME SETTINGS ====================

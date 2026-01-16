@@ -152,7 +152,7 @@ public class PlayerShooting : MonoBehaviour
         // Play reload sound
         if (AudioManager.Instance != null)
         {
-            AudioManager.Instance.PlayUIClick(); // Placeholder for reload sound
+            AudioManager.Instance.PlayReload();
         }
 
         float elapsed = 0f;
