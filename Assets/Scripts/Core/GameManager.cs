@@ -88,11 +88,10 @@ public class GameManager : MonoBehaviour
 
     void Start()
     {
-        // Auto-start for testing (remove in multiplayer)
-        StartGame();
-
-        // Subscribe to stress events AFTER StartGame finds the stress system
-        SubscribeToStressSystem();
+        // GameLoader handles initialization and calls StartGame() when ready
+        // In single player: GameLoader.BeginLoading() must be called (or use a Start Game button)
+        // In multiplayer: NetworkSpawnManager handles game start after connection
+        Debug.Log("[GameManager] Waiting for GameLoader or NetworkSpawnManager to start game...");
     }
 
     void SubscribeToStressSystem()
@@ -175,6 +174,9 @@ public class GameManager : MonoBehaviour
 
         currentPhase = GamePhase.Playing;
         OnGameStart?.Invoke();
+
+        // Subscribe to stress events
+        SubscribeToStressSystem();
     }
 
     /// <summary>

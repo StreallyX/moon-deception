@@ -53,7 +53,7 @@ public class AlienController : MonoBehaviour
         characterController.minMoveDistance = 0.001f;
         characterController.height = 2f;
         characterController.radius = 0.5f;
-        characterController.center = new Vector3(0, 0, 0); // Center at chest height for proper raycast hits
+        characterController.center = new Vector3(0, 1, 0); // Centered at y=1 for height=2 capsule (feet at 0, head at 2)
 
         // Ensure AlienHealth exists for damage system
         if (GetComponent<AlienHealth>() == null)
@@ -66,36 +66,13 @@ public class AlienController : MonoBehaviour
     
     void Start()
     {
-        // Find alien camera if not assigned
-        if (alienCamera == null)
-        {
-            // Look for a camera tagged or named for alien
-            Camera[] cameras = FindObjectsOfType<Camera>(true);
-            foreach (Camera cam in cameras)
-            {
-                if (cam.name.ToLower().Contains("alien"))
-                {
-                    alienCamera = cam;
-                    break;
-                }
-            }
-            // Fallback to main camera if no alien-specific camera
-            if (alienCamera == null)
-            {
-                alienCamera = Camera.main;
-            }
-        }
-        
-        if (alienCamera != null)
-        {
-            cameraTransform = alienCamera.transform;
-        }
-        
+        FindCamera();
+
         if (hungerSystem == null)
         {
             hungerSystem = GetComponent<HungerSystem>();
         }
-        
+
         yaw = transform.eulerAngles.y;
         velocity = Vector3.zero;
         
@@ -112,10 +89,83 @@ public class AlienController : MonoBehaviour
         Cursor.lockState = CursorLockMode.Locked;
         Cursor.visible = false;
 
+        // CRITICAL: Ensure CharacterController exists (Awake might not have run yet on network spawn)
+        if (characterController == null)
+        {
+            characterController = GetComponent<CharacterController>();
+            if (characterController == null)
+            {
+                characterController = gameObject.AddComponent<CharacterController>();
+                Debug.Log("[AlienController] Created CharacterController in OnEnable (Awake didn't run)");
+            }
+
+            // Configure CharacterController
+            characterController.skinWidth = 0.08f;
+            characterController.stepOffset = 0.3f;
+            characterController.minMoveDistance = 0.001f;
+            characterController.height = 2f;
+            characterController.radius = 0.5f;
+            characterController.center = new Vector3(0, 1, 0);
+        }
+
+        // Find camera if not found yet
+        FindCamera();
+
         // Enable alien camera when alien is controlled
+        // CRITICAL: Only use cameras that are children of this object or specifically for the alien
+        // If we ended up with Camera.main that belongs to another player, create our own!
+        bool needsNewCamera = (alienCamera == null);
+
+        if (alienCamera != null && !alienCamera.transform.IsChildOf(transform))
+        {
+            // This camera doesn't belong to us - might be Astronaut's camera
+            Debug.LogWarning($"[AlienController] Found camera {alienCamera.gameObject.name} but it's NOT a child of Alien - creating our own!");
+            needsNewCamera = true;
+        }
+
+        if (needsNewCamera)
+        {
+            // Create a camera for the alien
+            Debug.Log("[AlienController] Creating runtime camera for Alien...");
+            GameObject camObj = new GameObject("AlienCamera_Runtime");
+            camObj.transform.SetParent(null); // Don't parent to alien (we position it manually)
+            alienCamera = camObj.AddComponent<Camera>();
+            alienCamera.depth = 1; // Higher than default to ensure it renders on top
+            alienCamera.nearClipPlane = 0.1f;
+            alienCamera.farClipPlane = 1000f;
+
+            // Remove any existing AudioListeners to avoid conflicts
+            AudioListener[] listeners = FindObjectsOfType<AudioListener>();
+            foreach (var listener in listeners)
+            {
+                if (listener.gameObject != camObj)
+                {
+                    listener.enabled = false;
+                }
+            }
+            camObj.AddComponent<AudioListener>();
+
+            cameraTransform = alienCamera.transform;
+            Debug.Log($"[AlienController] Created runtime camera: {camObj.name}");
+        }
+
         if (alienCamera != null)
         {
+            // IMPORTANT: Disable all other cameras first to avoid rendering conflicts
+            Camera[] allCameras = FindObjectsOfType<Camera>(true);
+            foreach (Camera cam in allCameras)
+            {
+                if (cam != alienCamera)
+                {
+                    cam.enabled = false;
+                    Debug.Log($"[AlienController] Disabled other camera: {cam.gameObject.name}");
+                }
+            }
+
             alienCamera.gameObject.SetActive(true);
+            alienCamera.enabled = true;
+            cameraTransform = alienCamera.transform;
+            Debug.Log($"[AlienController] Enabled camera: {alienCamera.gameObject.name}, depth={alienCamera.depth}");
         }
 
         if (GameUIManager.Instance != null)
@@ -137,7 +187,73 @@ public class AlienController : MonoBehaviour
             }
         }
 
+        // Initialize yaw from current rotation
+        yaw = transform.eulerAngles.y;
+
         Debug.Log("[AlienController] Enabled - Alien is now controlled");
+
+        // Debug: Check critical components
+        Debug.Log($"[AlienController] CharacterController: {(characterController != null ? "OK" : "NULL!")}");
+        Debug.Log($"[AlienController] Camera: {(alienCamera != null ? alienCamera.gameObject.name : "NULL!")}");
+        Debug.Log($"[AlienController] CameraTransform: {(cameraTransform != null ? "OK" : "NULL!")}");
+        Debug.Log($"[AlienController] isControlled: {isControlled}");
+    }
+
+    void FindCamera()
+    {
+        Debug.Log($"[AlienController] FindCamera called. Current alienCamera={(alienCamera != null ? alienCamera.gameObject.name : "NULL")}");
+
+        // First try to find camera as child of this object (prefab camera)
+        if (alienCamera == null)
+        {
+            alienCamera = GetComponentInChildren<Camera>(true); // true = include inactive
+            if (alienCamera != null)
+            {
+                Debug.Log($"[AlienController] Found CHILD camera: {alienCamera.gameObject.name}, active={alienCamera.gameObject.activeInHierarchy}");
+            }
+            else
+            {
+                Debug.Log("[AlienController] No child camera found on Alien prefab!");
+            }
+        }
+
+        // Fallback: Look for a camera tagged or named for alien in scene
+        if (alienCamera == null)
+        {
+            Camera[] cameras = FindObjectsOfType<Camera>(true);
+            Debug.Log($"[AlienController] Searching {cameras.Length} cameras in scene...");
+            foreach (Camera cam in cameras)
+            {
+                Debug.Log($"[AlienController]   - Camera: {cam.gameObject.name}, active={cam.gameObject.activeInHierarchy}");
+                if (cam.name.ToLower().Contains("alien"))
+                {
+                    alienCamera = cam;
+                    Debug.Log($"[AlienController] Found scene camera with 'alien' in name: {cam.gameObject.name}");
+                    break;
+                }
+            }
+        }
+
+        // Last fallback: main camera (WARNING: this might be the Astronaut's camera!)
+        if (alienCamera == null)
+        {
+            alienCamera = Camera.main;
+            if (alienCamera != null)
+            {
+                Debug.LogWarning($"[AlienController] Using Camera.main as FALLBACK: {alienCamera.gameObject.name} - THIS MAY BE WRONG!");
+            }
+        }
+
+        // Set camera transform reference
+        if (alienCamera != null)
+        {
+            cameraTransform = alienCamera.transform;
+            Debug.Log($"[AlienController] cameraTransform set to: {cameraTransform.gameObject.name}");
+        }
+        else
+        {
+            Debug.LogError("[AlienController] NO CAMERA FOUND AT ALL!");
+        }
     }
     
     void OnDisable()
@@ -164,22 +280,46 @@ public class AlienController : MonoBehaviour
     
     void Update()
     {
-        if (!isControlled) return;
-        
+        if (!isControlled)
+        {
+            if (showDebugLogs && Time.frameCount % 120 == 0)
+            {
+                Debug.Log("[AlienController] Update skipped - not controlled");
+            }
+            return;
+        }
+
+        if (characterController == null)
+        {
+            Debug.LogError("[AlienController] CharacterController is NULL in Update!");
+            return;
+        }
+
         // === FIXED: Move() called EVERY frame to keep isGrounded updated ===
-        
+
         // 1. Handle camera rotation (mouse only)
         HandleCameraRotation();
-        
+
         // 2. Get input (can be zero)
         float h = Input.GetAxisRaw("Horizontal"); // A/D = strafe
         float v = Input.GetAxisRaw("Vertical");   // W/S = forward/back
+
+        // Debug input every 2 seconds
+        if (showDebugLogs && Time.frameCount % 120 == 0)
+        {
+            string camStatus = "NULL";
+            if (alienCamera != null)
+            {
+                camStatus = $"{alienCamera.gameObject.name}, enabled={alienCamera.enabled}, GO.active={alienCamera.gameObject.activeInHierarchy}";
+            }
+            Debug.Log($"[AlienController] Input: H={h}, V={v}, Pos={transform.position}, Camera=[{camStatus}]");
+        }
         
         // 3. Jump check FIRST (before gravity reset)
         if (Input.GetButtonDown("Jump") && characterController.isGrounded)
         {
             velocity.y = Mathf.Sqrt(jumpHeight * -2f * gravity);
-            Debug.Log("JUMP triggered!");
+            Debug.Log($"JUMP triggered! Pos={transform.position}, cameraTransform={(cameraTransform != null ? "OK" : "NULL")}, alienCamera={(alienCamera != null ? alienCamera.gameObject.name : "NULL")}");
         }
         
         // 4. Gravity logic
@@ -231,12 +371,21 @@ public class AlienController : MonoBehaviour
     
     void UpdateCameraPosition()
     {
-        if (cameraTransform == null) return;
-        
+        if (cameraTransform == null)
+        {
+            if (showDebugLogs && Time.frameCount % 60 == 0)
+            {
+                Debug.LogError("[AlienController] cameraTransform is NULL! Camera cannot follow.");
+            }
+            // Try to find camera again
+            FindCamera();
+            return;
+        }
+
         // Calculate camera position based on yaw and pitch (orbiting behind character)
         Quaternion rotation = Quaternion.Euler(pitch, yaw, 0);
         Vector3 targetPosition = transform.position + Vector3.up * 1.5f + rotation * new Vector3(0, 0, cameraOffset.z);
-        
+
         // Smooth camera follow
         cameraTransform.position = Vector3.Lerp(cameraTransform.position, targetPosition, 10f * Time.deltaTime);
         cameraTransform.LookAt(transform.position + Vector3.up * 1.5f);

@@ -39,7 +39,7 @@ public class PlayerShooting : MonoBehaviour
 
     private Camera playerCamera;
     private LineRenderer debugLineRenderer;
-    private float nextFireTime = 0f;
+    private float lastShotTime = -999f; // Simple time tracking
     private bool showingHitMarker = false;
     private Color currentHitMarkerColor;
     private Texture2D hitMarkerTexture;
@@ -55,7 +55,7 @@ public class PlayerShooting : MonoBehaviour
 
     void Start()
     {
-        playerCamera = Camera.main;
+        FindCamera();
         currentAmmo = magazineSize;
 
         debugLineRenderer = gameObject.AddComponent<LineRenderer>();
@@ -112,8 +112,41 @@ public class PlayerShooting : MonoBehaviour
         light.range = 5f;
     }
 
+    void OnEnable()
+    {
+        // Find camera when enabled
+        FindCamera();
+    }
+
+    void FindCamera()
+    {
+        // First try to find camera as child of this object
+        if (playerCamera == null)
+        {
+            playerCamera = GetComponentInChildren<Camera>(true);
+        }
+
+        // Fallback: main camera
+        if (playerCamera == null)
+        {
+            playerCamera = Camera.main;
+        }
+
+        if (playerCamera != null)
+        {
+            Debug.Log($"[PlayerShooting] Found camera: {playerCamera.gameObject.name}");
+        }
+    }
+
     void Update()
     {
+        // Make sure we have a camera
+        if (playerCamera == null)
+        {
+            FindCamera();
+            if (playerCamera == null) return;
+        }
+
         // Don't shoot while reloading
         if (isReloading) return;
 
@@ -124,13 +157,15 @@ public class PlayerShooting : MonoBehaviour
             return;
         }
 
-        // Shoot
-        if (Input.GetButton("Fire1") && Time.time >= nextFireTime)
+        // Shoot - simple time-based check (most reliable)
+        float timeSinceLastShot = Time.time - lastShotTime;
+
+        if (Input.GetButton("Fire1") && timeSinceLastShot >= fireRate && !isReloading)
         {
             if (currentAmmo > 0 || infiniteAmmo)
             {
+                lastShotTime = Time.time;
                 Shoot();
-                nextFireTime = Time.time + fireRate;
             }
             else
             {

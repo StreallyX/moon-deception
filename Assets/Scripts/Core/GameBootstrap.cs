@@ -9,6 +9,7 @@ using Unity.Netcode;
 public class GameBootstrap : MonoBehaviour
 {
     [Header("Auto-Create Managers")]
+    public bool createGameLoader = true;
     public bool createAudioManager = true;
     public bool createMenuManager = true;
     public bool createPostProcessController = true;
@@ -42,6 +43,16 @@ public class GameBootstrap : MonoBehaviour
     void InitializeSystems()
     {
         Debug.Log("[GameBootstrap] Initializing game systems...");
+
+        // Game Loader (creates loading screen and manages initialization)
+        if (createGameLoader && GameLoader.Instance == null)
+        {
+            GameObject loaderObj = new GameObject("GameLoader");
+            loaderObj.AddComponent<GameLoader>();
+            loaderObj.AddComponent<LoadingScreen>();
+            DontDestroyOnLoad(loaderObj);
+            Debug.Log("[GameBootstrap] Created GameLoader with LoadingScreen");
+        }
 
         // Audio Manager
         if (createAudioManager && AudioManager.Instance == null)
@@ -177,6 +188,17 @@ public class GameBootstrap : MonoBehaviour
     System.Collections.IEnumerator SetupPlayerAndAlien()
     {
         yield return null;
+
+        // SKIP setup if we're in networked mode - NetworkedPlayer handles this
+        if (NetworkManager.Singleton != null &&
+            (NetworkManager.Singleton.IsClient || NetworkManager.Singleton.IsServer))
+        {
+            Debug.Log("[GameBootstrap] Skipping player setup - networked mode active");
+            yield break;
+        }
+
+        // Only setup in single player / testing mode
+        Debug.Log("[GameBootstrap] Setting up players for single player mode");
 
         // Setup astronaut
         if (addHealthToAstronaut)

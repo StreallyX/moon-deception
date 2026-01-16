@@ -41,7 +41,24 @@ public class StressSystem : MonoBehaviour, IDamageable
 
     void Awake()
     {
+        // Don't set Instance here - it will be set in OnEnable
+        // This prevents remote player's StressSystem from overwriting the local one
+    }
+
+    void OnEnable()
+    {
+        // Only set Instance when enabled (local player only)
         Instance = this;
+        Debug.Log("[StressSystem] Instance set (OnEnable)");
+    }
+
+    void OnDisable()
+    {
+        // Clear Instance if this was the active one
+        if (Instance == this)
+        {
+            Instance = null;
+        }
     }
 
     void Start()

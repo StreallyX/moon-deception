@@ -23,6 +23,12 @@ public class NetworkConnectionUI : MonoBehaviour
             showUI = !showUI;
         }
 
+        // Quick single player with Space (debug)
+        if (Input.GetKeyDown(KeyCode.Space) && !IsConnected() && !IsGameStarted())
+        {
+            StartSinglePlayer();
+        }
+
         // Quick host with H key (debug)
         if (Input.GetKeyDown(KeyCode.H) && !IsConnected())
         {
@@ -34,6 +40,12 @@ public class NetworkConnectionUI : MonoBehaviour
         {
             StartClient();
         }
+    }
+
+    bool IsGameStarted()
+    {
+        return GameManager.Instance != null &&
+               GameManager.Instance.CurrentPhase != GameManager.GamePhase.Lobby;
     }
 
     bool IsConnected()
@@ -81,13 +93,21 @@ public class NetworkConnectionUI : MonoBehaviour
 
     void DrawConnectionUI()
     {
+        // Single Player button
+        if (GUILayout.Button("Single Player (Space)", GUILayout.Height(35)))
+        {
+            StartSinglePlayer();
+        }
+
+        GUILayout.Space(10);
+
         // IP Address input
         GUILayout.BeginHorizontal();
         GUILayout.Label("IP:", GUILayout.Width(30));
         ipInput = GUILayout.TextField(ipInput, GUILayout.Width(150));
         GUILayout.EndHorizontal();
 
-        GUILayout.Space(10);
+        GUILayout.Space(5);
 
         // Host button
         if (GUILayout.Button("Host Game (H)", GUILayout.Height(35)))
@@ -131,10 +151,24 @@ public class NetworkConnectionUI : MonoBehaviour
 
     void StartHost()
     {
+        Debug.Log("[NetworkConnectionUI] StartHost() called");
+
         if (NetworkManager.Singleton == null)
         {
             statusMessage = "ERROR: NetworkManager not found!";
+            Debug.LogError("[NetworkConnectionUI] NetworkManager.Singleton is NULL!");
             return;
+        }
+
+        // Start loading screen
+        if (GameLoader.Instance != null)
+        {
+            Debug.Log("[NetworkConnectionUI] Calling GameLoader.BeginLoading()...");
+            GameLoader.Instance.BeginLoading();
+        }
+        else
+        {
+            Debug.LogWarning("[NetworkConnectionUI] GameLoader.Instance is NULL - no loading screen!");
         }
 
         // Set port
@@ -151,10 +185,24 @@ public class NetworkConnectionUI : MonoBehaviour
 
     void StartClient()
     {
+        Debug.Log("[NetworkConnectionUI] StartClient() called");
+
         if (NetworkManager.Singleton == null)
         {
             statusMessage = "ERROR: NetworkManager not found!";
+            Debug.LogError("[NetworkConnectionUI] NetworkManager.Singleton is NULL!");
             return;
+        }
+
+        // Start loading screen
+        if (GameLoader.Instance != null)
+        {
+            Debug.Log("[NetworkConnectionUI] Calling GameLoader.BeginLoading()...");
+            GameLoader.Instance.BeginLoading();
+        }
+        else
+        {
+            Debug.LogWarning("[NetworkConnectionUI] GameLoader.Instance is NULL - no loading screen!");
         }
 
         // Set connection data
@@ -168,6 +216,29 @@ public class NetworkConnectionUI : MonoBehaviour
         NetworkManager.Singleton.StartClient();
         statusMessage = $"Connecting to {ipInput}:{port}...";
         Debug.Log($"[Network] Connecting to {ipInput}:{port}");
+    }
+
+    void StartSinglePlayer()
+    {
+        // Hide UI
+        showUI = false;
+
+        // Start loading screen
+        if (GameLoader.Instance != null)
+        {
+            GameLoader.Instance.BeginLoading();
+        }
+        else
+        {
+            // Fallback: directly start game
+            if (GameManager.Instance != null)
+            {
+                GameManager.Instance.StartGame();
+            }
+        }
+
+        statusMessage = "Starting single player...";
+        Debug.Log("[Network] Starting single player mode");
     }
 
     void Disconnect()

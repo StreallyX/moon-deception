@@ -162,7 +162,11 @@ public class RoleAnnouncementUI : MonoBehaviour
         if (role == NetworkGameManager.PlayerRole.None) return;
 
         bool isAstronaut = (role == NetworkGameManager.PlayerRole.Astronaut);
+        ShowRole(isAstronaut);
+    }
 
+    public void ShowRole(bool isAstronaut)
+    {
         string roleTitle = isAstronaut ? "ASTRONAUT" : "ALIEN";
         string subtitle = isAstronaut
             ? "Find and eliminate the aliens among the crew"

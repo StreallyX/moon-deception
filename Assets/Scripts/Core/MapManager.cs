@@ -42,6 +42,52 @@ public class MapManager : MonoBehaviour
         }
     }
 
+    void Start()
+    {
+        // Auto-find all zones in the scene if none registered yet
+        StartCoroutine(AutoFindZones());
+    }
+
+    System.Collections.IEnumerator AutoFindZones()
+    {
+        // Wait for zones to register themselves
+        yield return new WaitForSeconds(0.5f);
+
+        // If no zones registered, find them manually
+        if (allZones.Count == 0)
+        {
+            Debug.Log("[MapManager] No zones registered, searching scene...");
+            FindAllZonesInScene();
+        }
+
+        Debug.Log($"[MapManager] Total zones registered: {allZones.Count}");
+        foreach (var zone in allZones)
+        {
+            if (zone != null)
+            {
+                Debug.Log($"  - {zone.zoneName} ({zone.zoneType})");
+            }
+        }
+    }
+
+    /// <summary>
+    /// Find all MapZone components in the scene and register them
+    /// </summary>
+    public void FindAllZonesInScene()
+    {
+        MapZone[] zones = FindObjectsOfType<MapZone>(true); // true = include inactive
+        Debug.Log($"[MapManager] Found {zones.Length} zones in scene");
+
+        foreach (var zone in zones)
+        {
+            if (!allZones.Contains(zone))
+            {
+                allZones.Add(zone);
+                Debug.Log($"[MapManager] Auto-registered zone: {zone.zoneName} ({zone.zoneType})");
+            }
+        }
+    }
+
     /// <summary>
     /// Register a zone with the manager
     /// </summary>

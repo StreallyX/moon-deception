@@ -49,30 +49,13 @@ public class PlayerMovement : MonoBehaviour
     void Start()
     {
         // Auto-find camera if not assigned
-        if (cameraTransform == null)
-        {
-            Camera cam = GetComponentInChildren<Camera>();
-            if (cam != null)
-            {
-                cameraTransform = cam.transform;
-                playerCamera = cam;
-            }
-            else if (Camera.main != null)
-            {
-                cameraTransform = Camera.main.transform;
-                playerCamera = Camera.main;
-            }
-        }
-        else if (playerCamera == null)
-        {
-            playerCamera = cameraTransform.GetComponent<Camera>();
-        }
-        
+        FindCamera();
+
         velocity = Vector3.zero;
-        
+
         // Force Unity to resolve collision on first frame
         controller.Move(Vector3.down * 0.5f);
-        
+
         Debug.Log($"[PlayerMovement] Initialized. Camera: {cameraTransform?.name}");
     }
     
@@ -83,10 +66,15 @@ public class PlayerMovement : MonoBehaviour
         Cursor.lockState = CursorLockMode.Locked;
         Cursor.visible = false;
 
+        // Find camera if not found yet
+        FindCamera();
+
         // Enable player camera when player is controlled
         if (playerCamera != null)
         {
             playerCamera.gameObject.SetActive(true);
+            playerCamera.enabled = true;
+            Debug.Log($"[PlayerMovement] Enabled camera: {playerCamera.gameObject.name}");
         }
 
         if (GameUIManager.Instance != null)
@@ -95,6 +83,29 @@ public class PlayerMovement : MonoBehaviour
         }
 
         Debug.Log("[PlayerMovement] Enabled - Player is now controlled");
+    }
+
+    void FindCamera()
+    {
+        // First try to find camera as child of this object (prefab camera)
+        if (cameraTransform == null || playerCamera == null)
+        {
+            Camera cam = GetComponentInChildren<Camera>(true); // true = include inactive
+            if (cam != null)
+            {
+                cameraTransform = cam.transform;
+                playerCamera = cam;
+                Debug.Log($"[PlayerMovement] Found child camera: {cam.gameObject.name}");
+            }
+        }
+
+        // Fallback: main camera
+        if (cameraTransform == null && Camera.main != null)
+        {
+            cameraTransform = Camera.main.transform;
+            playerCamera = Camera.main;
+            Debug.Log("[PlayerMovement] Using main camera as fallback");
+        }
     }
 
     void OnDisable()

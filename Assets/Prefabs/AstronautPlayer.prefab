@@ -15,7 +15,8 @@ GameObject:
   - component: {fileID: 2342444708684217448}
   - component: {fileID: 8342815832688024403}
   - component: {fileID: 370832857243415732}
-  - component: {fileID: -330225012671157442}
+  - component: {fileID: 3344261492158539547}
+  - component: {fileID: -3426836638537219259}
   m_Layer: 0
   m_Name: AstronautPlayer
   m_TagString: Player
@@ -72,7 +73,7 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1456307801489296658}
-  m_Enabled: 1
+  m_Enabled: 0
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: bf4815b95c3070f4e9c24f7ab4c9b228, type: 3}
   m_Name: 
@@ -93,7 +94,7 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1456307801489296658}
-  m_Enabled: 1
+  m_Enabled: 0
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 90dc2acf19c583641ae339ac07b3f42a, type: 3}
   m_Name: 
@@ -129,7 +130,7 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1456307801489296658}
-  m_Enabled: 1
+  m_Enabled: 0
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: c65fa10fada349344bf7b098d3839e80, type: 3}
   m_Name: 
@@ -223,7 +224,7 @@ MonoBehaviour:
   AutoObjectParentSync: 1
   SyncOwnerTransformWhenParented: 1
   AllowOwnerToParent: 0
---- !u!114 &-330225012671157442
+--- !u!114 &3344261492158539547
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -232,7 +233,33 @@ MonoBehaviour:
   m_GameObject: {fileID: 1456307801489296658}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: e96cb6065543e43c4a752faaa1468eb1, type: 3}
+  m_Script: {fileID: 11500000, guid: 9f12c3a39d667d141af9e3601c2d811d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  ShowTopMostFoldoutHeaderGroup: 1
+  isAstronaut: 1
+  playerMovement: {fileID: 7162103154204086596}
+  playerShooting: {fileID: 3345135795573115230}
+  stressSystem: {fileID: 2342444708684217448}
+  alienController: {fileID: 0}
+  hungerSystem: {fileID: 0}
+  alienHealth: {fileID: 0}
+  alienAbilities: {fileID: 0}
+  playerCamera: {fileID: 5332780897576527265}
+  audioListener: {fileID: 1910110657233663291}
+  playerModel: {fileID: 0}
+  IsAstronautRole:
+    m_InternalValue: 1
+--- !u!114 &-3426836638537219259
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1456307801489296658}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f319f53b8877a28499d09c03cccd2b04, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
   ShowTopMostFoldoutHeaderGroup: 1
@@ -287,7 +314,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!4 &8964386335156044300
 Transform:
   m_ObjectHideFlags: 0
@@ -361,7 +388,7 @@ AudioListener:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1807770133768714345}
-  m_Enabled: 1
+  m_Enabled: 0
 --- !u!114 &171985710131416407
 MonoBehaviour:
   m_ObjectHideFlags: 0

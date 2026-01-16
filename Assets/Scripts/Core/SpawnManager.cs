@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEngine.Events;
 using System.Collections.Generic;
+using Unity.Netcode;
 
 /// <summary>
 /// Handles spawning of entities (NPCs, defense zones, interactables) with randomization rules.
@@ -40,6 +41,8 @@ public class SpawnManager : MonoBehaviour
     [SerializeField] private List<AlarmTerminal> spawnedAlarmTerminals = new List<AlarmTerminal>();
 
     private Transform astronautTransform;
+    private bool hasSpawnedEntities = false;
+    private bool hasSpawnedInteractables = false;
 
     void Awake()
     {
@@ -63,6 +66,53 @@ public class SpawnManager : MonoBehaviour
         {
             astronautTransform = player.transform;
         }
+
+        // If we're a client (not server), spawn interactables locally after a delay
+        // Server spawning is handled by NetworkSpawnManager
+        StartCoroutine(ClientSideSpawnCheck());
+    }
+
+    System.Collections.IEnumerator ClientSideSpawnCheck()
+    {
+        // Wait for network to initialize and MapManager to find zones
+        yield return new WaitForSeconds(3f);
+
+        // Log MapManager status
+        if (MapManager.Instance != null)
+        {
+            Debug.Log($"[SpawnManager] MapManager found with {MapManager.Instance.ZoneCount} zones");
+            foreach (var zone in MapManager.Instance.AllZones)
+            {
+                if (zone != null)
+                {
+                    int interactablePoints = zone.interactableSpawnPoints?.Length ?? 0;
+                    int defensePoints = zone.defenseZoneSpawnPoints?.Length ?? 0;
+                    Debug.Log($"[SpawnManager] Zone '{zone.zoneName}': {interactablePoints} interactable points, {defensePoints} defense points");
+                }
+            }
+        }
+        else
+        {
+            Debug.LogWarning("[SpawnManager] MapManager.Instance is NULL!");
+        }
+
+        // Only spawn if we're a client (not server/host)
+        if (NetworkManager.Singleton != null && NetworkManager.Singleton.IsClient && !NetworkManager.Singleton.IsServer)
+        {
+            if (!hasSpawnedInteractables)
+            {
+                hasSpawnedInteractables = true;
+                Debug.Log("[SpawnManager] Client detected - spawning interactables locally");
+                SpawnDefenseZones();
+                SpawnInteractables();
+            }
+        }
+        // Also spawn if no network at all (single player mode)
+        else if (NetworkManager.Singleton == null)
+        {
+            Debug.Log("[SpawnManager] No network - spawning interactables for single player");
+            SpawnAllEntities();
+        }
     }
 
     /// <summary>
@@ -71,6 +121,14 @@ public class SpawnManager : MonoBehaviour
     /// </summary>
     public void SpawnAllEntities()
     {
+        if (hasSpawnedEntities)
+        {
+            Debug.Log("[SpawnManager] Already spawned entities, skipping...");
+            return;
+        }
+        hasSpawnedEntities = true;
+        hasSpawnedInteractables = true; // Also mark interactables as spawned
+
         Debug.Log("[SpawnManager] ========== SPAWNING ENTITIES ==========");
 
         // Find astronaut position
@@ -200,7 +258,13 @@ public class SpawnManager : MonoBehaviour
             zoneObj = new GameObject($"DefenseZone_{spawnedDefenseZones.Count + 1}");
             zoneObj.transform.position = position;
             zoneObj.AddComponent<DefenseZone>();
+
+            // Add visual so it's visible
+            CreateInteractableVisual(zoneObj, Color.green); // Green for defense
         }
+
+        // NOTE: Don't spawn as NetworkObject - dynamically created objects can't be networked
+        // without registered prefabs. Defense zones will be created locally on each client.
 
         var zone = zoneObj.GetComponent<DefenseZone>();
         if (zone != null)
@@ -349,7 +413,13 @@ public class SpawnManager : MonoBehaviour
             coffeeObj = new GameObject($"CoffeeMachine_{spawnedCoffeeMachines.Count + 1}");
             coffeeObj.transform.position = position;
             coffeeObj.AddComponent<CoffeeMachine>();
+
+            // Add visual so it's visible
+            CreateInteractableVisual(coffeeObj, new Color(0.6f, 0.4f, 0.2f)); // Brown for coffee
         }
+
+        // NOTE: Don't spawn as NetworkObject - dynamically created objects can't be networked
+        // without registered prefabs. Interactables will be created locally on each client.
 
         var coffee = coffeeObj.GetComponent<CoffeeMachine>();
         Debug.Log($"[SpawnManager] Created coffee machine at {position}");
@@ -369,11 +439,48 @@ public class SpawnManager : MonoBehaviour
             alarmObj = new GameObject($"AlarmTerminal_{spawnedAlarmTerminals.Count + 1}");
             alarmObj.transform.position = position;
             alarmObj.AddComponent<AlarmTerminal>();
+
+            // Add visual so it's visible
+            CreateInteractableVisual(alarmObj, Color.red); // Red for alarm
         }
+
+        // NOTE: Don't spawn as NetworkObject - dynamically created objects can't be networked
+        // without registered prefabs. Alarm terminals will be created locally on each client.
 
         var alarm = alarmObj.GetComponent<AlarmTerminal>();
         Debug.Log($"[SpawnManager] Created alarm terminal at {position}");
         return alarm;
+    }
+
+    /// <summary>
+    /// Create a simple visual for interactables that don't have prefabs
+    /// </summary>
+    void CreateInteractableVisual(GameObject obj, Color color)
+    {
+        try
+        {
+            // Create a simple cube as visual
+            GameObject visual = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            visual.transform.SetParent(obj.transform);
+            visual.transform.localPosition = Vector3.up * 0.5f;
+            visual.transform.localScale = new Vector3(1f, 1f, 1f);
+
+            // Set color - use the default material that comes with the primitive
+            var renderer = visual.GetComponent<Renderer>();
+            if (renderer != null && renderer.material != null)
+            {
+                // Just change color on existing material (safer for builds)
+                renderer.material.color = color;
+            }
+
+            // Remove collider from visual (parent has collider)
+            var collider = visual.GetComponent<Collider>();
+            if (collider != null) Destroy(collider);
+        }
+        catch (System.Exception e)
+        {
+            Debug.LogWarning($"[SpawnManager] Could not create visual: {e.Message}");
+        }
     }
 
     // ==================== UTILITY ====================

@@ -2,24 +2,31 @@ using UnityEngine;
 using Unity.Netcode;
 
 /// <summary>
-/// Simple network test - spawns a cube for each connected player.
-/// Add this to a GameObject in your game scene.
+/// Simplified network test - handles network startup.
+/// Player spawning is handled by NetworkSpawnManager.
+/// Press H to Host, J to Join.
 /// </summary>
 public class SimpleNetworkTest : MonoBehaviour
 {
-    [Header("Player Prefabs (Assign in Inspector)")]
+    [Header("Network Spawn Manager (auto-creates if null)")]
+    public NetworkSpawnManager networkSpawnManager;
+
+    [Header("Player Prefabs (for NetworkSpawnManager)")]
     public GameObject astronautPrefab;
     public GameObject alienPrefab;
 
-    [Header("Spawn Points")]
-    public Transform astronautSpawnPoint;
-    public Transform alienSpawnPoint;
+    [Header("Optional NPC Prefab")]
+    public GameObject npcPrefab;
 
-    private bool hasStartedNetwork = false;
+    [Header("Settings")]
+    public int npcCount = 10;
+
+    private bool networkStarted = false;
+    private bool prefabsRegistered = false;
 
     void Awake()
     {
-        // Create a camera if there isn't one
+        // Create camera if none exists
         if (Camera.main == null)
         {
             Debug.Log("[NetworkTest] Creating temporary camera...");
@@ -31,231 +38,25 @@ public class SimpleNetworkTest : MonoBehaviour
             cam.transform.LookAt(Vector3.zero);
             cam.backgroundColor = new Color(0.1f, 0.1f, 0.2f);
         }
+
+        // Ensure RoleAnnouncementUI exists
+        if (RoleAnnouncementUI.Instance == null)
+        {
+            GameObject uiObj = new GameObject("RoleAnnouncementUI");
+            uiObj.AddComponent<RoleAnnouncementUI>();
+        }
     }
 
     void Start()
     {
-        Debug.Log("[NetworkTest] Start called");
-
-        // Try to start network if not already started
-        StartCoroutine(TryStartNetwork());
+        Debug.Log("[NetworkTest] Ready. Press H to Host, J to Join.");
+        StartCoroutine(EnsureNetworkManager());
     }
 
-    System.Collections.IEnumerator TryStartNetwork()
+    System.Collections.IEnumerator EnsureNetworkManager()
     {
-        yield return new WaitForSeconds(0.5f);
+        yield return new WaitForSeconds(0.2f);
 
-        if (NetworkManager.Singleton == null)
-        {
-            Debug.LogError("[NetworkTest] NetworkManager.Singleton is NULL! Creating one...");
-
-            GameObject nmObj = new GameObject("NetworkManager");
-            nmObj.AddComponent<NetworkManager>();
-            var transport = nmObj.AddComponent<Unity.Netcode.Transports.UTP.UnityTransport>();
-
-            yield return null;
-
-            if (NetworkManager.Singleton != null)
-            {
-                NetworkManager.Singleton.NetworkConfig.NetworkTransport = transport;
-            }
-        }
-
-        if (NetworkManager.Singleton != null)
-        {
-            NetworkManager.Singleton.OnClientConnectedCallback += OnClientConnected;
-            NetworkManager.Singleton.OnClientDisconnectCallback += OnClientDisconnected;
-
-            Debug.Log($"[NetworkTest] NetworkManager found. IsServer: {NetworkManager.Singleton.IsServer}, IsClient: {NetworkManager.Singleton.IsClient}, IsConnectedClient: {NetworkManager.Singleton.IsConnectedClient}");
-        }
-    }
-
-    private bool gameStarted = false;
-    private string myRole = "";
-
-    void OnClientConnected(ulong clientId)
-    {
-        Debug.Log($"[NetworkTest] === CLIENT {clientId} CONNECTED! ===");
-
-        // Check if this is the local client
-        if (clientId == NetworkManager.Singleton.LocalClientId)
-        {
-            // Host (clientId 0) = Astronaut, Others = Alien
-            bool isAstronaut = (clientId == 0);
-            myRole = isAstronaut ? "ASTRONAUT" : "ALIEN";
-
-            Debug.Log($"[NetworkTest] I am the {myRole}!");
-
-            // Start the game for this player
-            StartGameForRole(isAstronaut);
-        }
-
-        // If we're host and 2 players connected, game is ready
-        if (NetworkManager.Singleton.IsHost && NetworkManager.Singleton.ConnectedClientsIds.Count >= 2)
-        {
-            Debug.Log("[NetworkTest] 2 players connected - GAME START!");
-        }
-    }
-
-    void OnClientDisconnected(ulong clientId)
-    {
-        Debug.Log($"[NetworkTest] Client disconnected: {clientId}");
-    }
-
-    void StartGameForRole(bool isAstronaut)
-    {
-        if (gameStarted) return;
-        gameStarted = true;
-
-        Debug.Log($"[NetworkTest] Starting game as {(isAstronaut ? "Astronaut" : "Alien")}...");
-
-        GameObject spawnedPlayer = null;
-        Vector3 spawnPos = GetRandomSpawnPoint(isAstronaut);
-
-        if (isAstronaut)
-        {
-            // Spawn Astronaut
-            if (astronautPrefab != null)
-            {
-                spawnedPlayer = Instantiate(astronautPrefab, spawnPos, Quaternion.identity);
-                spawnedPlayer.name = "Player_Astronaut";
-                Debug.Log($"[NetworkTest] Astronaut SPAWNED at {spawnPos}");
-            }
-            else
-            {
-                Debug.LogError("[NetworkTest] Astronaut Prefab not assigned!");
-            }
-        }
-        else
-        {
-            // Spawn Alien
-            if (alienPrefab != null)
-            {
-                spawnedPlayer = Instantiate(alienPrefab, spawnPos, Quaternion.identity);
-                spawnedPlayer.name = "Player_Alien";
-                Debug.Log($"[NetworkTest] Alien SPAWNED at {spawnPos}");
-            }
-            else
-            {
-                Debug.LogError("[NetworkTest] Alien Prefab not assigned!");
-            }
-        }
-
-        // Check if spawned player has camera
-        if (spawnedPlayer != null)
-        {
-            Camera playerCam = spawnedPlayer.GetComponentInChildren<Camera>(true);
-            if (playerCam != null)
-            {
-                playerCam.gameObject.SetActive(true);
-
-                // Destroy temp camera
-                Camera tempCam = GameObject.Find("TempCamera")?.GetComponent<Camera>();
-                if (tempCam != null)
-                {
-                    Destroy(tempCam.gameObject);
-                }
-            }
-        }
-
-        // Start GameManager if exists
-        if (GameManager.Instance != null)
-        {
-            GameManager.Instance.StartGame();
-        }
-    }
-
-    Vector3 GetRandomSpawnPoint(bool isAstronaut)
-    {
-        // Try to use MapManager spawn points
-        if (MapManager.Instance != null)
-        {
-            var zones = MapManager.Instance.AllZones;
-            if (zones != null && zones.Count > 0)
-            {
-                // Astronaut spawns in Command zone, Alien in random other zone
-                foreach (var zone in zones)
-                {
-                    if (isAstronaut && zone.zoneType == MapZone.ZoneType.Command)
-                    {
-                        if (zone.npcSpawnPoints != null && zone.npcSpawnPoints.Length > 0)
-                        {
-                            Transform point = zone.npcSpawnPoints[Random.Range(0, zone.npcSpawnPoints.Length)];
-                            Debug.Log($"[NetworkTest] Using spawn point from {zone.zoneType} zone");
-                            return point.position;
-                        }
-                    }
-                    else if (!isAstronaut && zone.zoneType != MapZone.ZoneType.Command)
-                    {
-                        if (zone.npcSpawnPoints != null && zone.npcSpawnPoints.Length > 0)
-                        {
-                            Transform point = zone.npcSpawnPoints[Random.Range(0, zone.npcSpawnPoints.Length)];
-                            Debug.Log($"[NetworkTest] Using spawn point from {zone.zoneType} zone");
-                            return point.position;
-                        }
-                    }
-                }
-
-                // Fallback: use any zone with spawn points
-                foreach (var zone in zones)
-                {
-                    if (zone.npcSpawnPoints != null && zone.npcSpawnPoints.Length > 0)
-                    {
-                        Transform point = zone.npcSpawnPoints[Random.Range(0, zone.npcSpawnPoints.Length)];
-                        return point.position;
-                    }
-                }
-            }
-        }
-
-        // Manual spawn points fallback
-        if (isAstronaut && astronautSpawnPoint != null)
-            return astronautSpawnPoint.position;
-        if (!isAstronaut && alienSpawnPoint != null)
-            return alienSpawnPoint.position;
-
-        // Default fallback
-        Debug.LogWarning("[NetworkTest] No spawn points found, using default position");
-        return isAstronaut ? new Vector3(0, 1, 0) : new Vector3(5, 1, 5);
-    }
-
-    void Update()
-    {
-        // Manual network start controls
-        if (Input.GetKeyDown(KeyCode.H))
-        {
-            StartAsHost();
-        }
-        else if (Input.GetKeyDown(KeyCode.J))
-        {
-            StartAsClient();
-        }
-    }
-
-    void StartAsHost()
-    {
-        EnsureNetworkManager();
-
-        if (NetworkManager.Singleton != null && !NetworkManager.Singleton.IsClient && !NetworkManager.Singleton.IsServer)
-        {
-            Debug.Log("[NetworkTest] Starting as HOST...");
-            NetworkManager.Singleton.StartHost();
-        }
-    }
-
-    void StartAsClient()
-    {
-        EnsureNetworkManager();
-
-        if (NetworkManager.Singleton != null && !NetworkManager.Singleton.IsClient && !NetworkManager.Singleton.IsServer)
-        {
-            Debug.Log("[NetworkTest] Starting as CLIENT...");
-            NetworkManager.Singleton.StartClient();
-        }
-    }
-
-    void EnsureNetworkManager()
-    {
         if (NetworkManager.Singleton == null)
         {
             Debug.Log("[NetworkTest] Creating NetworkManager...");
@@ -265,12 +66,235 @@ public class SimpleNetworkTest : MonoBehaviour
             NetworkManager nm = nmObj.AddComponent<NetworkManager>();
             var transport = nmObj.AddComponent<Unity.Netcode.Transports.UTP.UnityTransport>();
             nm.NetworkConfig.NetworkTransport = transport;
+
+            yield return null;
         }
+
+        // Register prefabs with NetworkManager
+        RegisterPrefabs();
+
+        // Subscribe to events
+        if (NetworkManager.Singleton != null)
+        {
+            NetworkManager.Singleton.OnServerStarted += OnServerStarted;
+            NetworkManager.Singleton.OnClientConnectedCallback += OnClientConnected;
+        }
+    }
+
+    void RegisterPrefabs()
+    {
+        if (NetworkManager.Singleton == null) return;
+        if (prefabsRegistered) return;
+
+        Debug.Log("[NetworkTest] Registering prefabs...");
+
+        // Register prefabs - use try/catch to handle duplicates gracefully
+        if (astronautPrefab != null)
+        {
+            var netObj = astronautPrefab.GetComponent<NetworkObject>();
+            if (netObj != null)
+            {
+                if (!IsPrefabRegistered(astronautPrefab))
+                {
+                    try
+                    {
+                        NetworkManager.Singleton.AddNetworkPrefab(astronautPrefab);
+                        Debug.Log("[NetworkTest] Registered Astronaut prefab");
+                    }
+                    catch (System.Exception e)
+                    {
+                        Debug.Log($"[NetworkTest] Astronaut prefab already registered: {e.Message}");
+                    }
+                }
+                else
+                {
+                    Debug.Log("[NetworkTest] Astronaut prefab already in list");
+                }
+            }
+            else
+            {
+                Debug.LogError("[NetworkTest] Astronaut prefab missing NetworkObject!");
+            }
+        }
+        else
+        {
+            Debug.LogError("[NetworkTest] Astronaut prefab is NULL!");
+        }
+
+        if (alienPrefab != null)
+        {
+            var netObj = alienPrefab.GetComponent<NetworkObject>();
+            if (netObj != null)
+            {
+                if (!IsPrefabRegistered(alienPrefab))
+                {
+                    try
+                    {
+                        NetworkManager.Singleton.AddNetworkPrefab(alienPrefab);
+                        Debug.Log("[NetworkTest] Registered Alien prefab");
+                    }
+                    catch (System.Exception e)
+                    {
+                        Debug.Log($"[NetworkTest] Alien prefab already registered: {e.Message}");
+                    }
+                }
+                else
+                {
+                    Debug.Log("[NetworkTest] Alien prefab already in list");
+                }
+            }
+            else
+            {
+                Debug.LogError("[NetworkTest] Alien prefab missing NetworkObject!");
+            }
+        }
+        else
+        {
+            Debug.LogError("[NetworkTest] Alien prefab is NULL!");
+        }
+
+        if (npcPrefab != null)
+        {
+            var netObj = npcPrefab.GetComponent<NetworkObject>();
+            if (netObj != null)
+            {
+                if (!IsPrefabRegistered(npcPrefab))
+                {
+                    try
+                    {
+                        NetworkManager.Singleton.AddNetworkPrefab(npcPrefab);
+                        Debug.Log("[NetworkTest] Registered NPC prefab");
+                    }
+                    catch { }
+                }
+            }
+        }
+
+        prefabsRegistered = true;
+    }
+
+    bool IsPrefabRegistered(GameObject prefab)
+    {
+        if (NetworkManager.Singleton == null || NetworkManager.Singleton.NetworkConfig == null)
+            return false;
+
+        var prefabsList = NetworkManager.Singleton.NetworkConfig.Prefabs;
+        if (prefabsList == null || prefabsList.Prefabs == null) return false;
+
+        foreach (var networkPrefab in prefabsList.Prefabs)
+        {
+            if (networkPrefab.Prefab == prefab)
+                return true;
+        }
+        return false;
+    }
+
+    void OnServerStarted()
+    {
+        Debug.Log("[NetworkTest] Server started - creating NetworkSpawnManager...");
+
+        // Create NetworkSpawnManager if needed (NOT as a NetworkObject - just local)
+        if (networkSpawnManager == null)
+        {
+            GameObject spawnMgrObj = new GameObject("NetworkSpawnManager");
+            networkSpawnManager = spawnMgrObj.AddComponent<NetworkSpawnManager>();
+            networkSpawnManager.astronautPrefab = astronautPrefab;
+            networkSpawnManager.alienPrefab = alienPrefab;
+            networkSpawnManager.npcPrefab = npcPrefab;
+            networkSpawnManager.npcCount = npcCount;
+
+            // DON'T spawn as NetworkObject - it doesn't need to be synced
+            // The manager just runs on the server and spawns players
+            Debug.Log("[NetworkTest] NetworkSpawnManager created (server-only)");
+        }
+
+        // Destroy temp camera (player will have their own)
+        DestroyTempCamera();
+    }
+
+    void OnClientConnected(ulong clientId)
+    {
+        Debug.Log($"[NetworkTest] Client {clientId} connected (local: {NetworkManager.Singleton.LocalClientId})");
+
+        if (clientId == NetworkManager.Singleton.LocalClientId)
+        {
+            // We connected - destroy temp camera
+            DestroyTempCamera();
+        }
+    }
+
+    void DestroyTempCamera()
+    {
+        // Wait a moment for player camera to be ready
+        StartCoroutine(DestroyTempCameraDelayed());
+    }
+
+    System.Collections.IEnumerator DestroyTempCameraDelayed()
+    {
+        yield return new WaitForSeconds(0.5f);
+
+        GameObject tempCam = GameObject.Find("TempCamera");
+        if (tempCam != null)
+        {
+            Destroy(tempCam);
+            Debug.Log("[NetworkTest] Destroyed temp camera");
+        }
+    }
+
+    void Update()
+    {
+        if (networkStarted) return;
+
+        if (Input.GetKeyDown(KeyCode.H))
+        {
+            StartHost();
+        }
+        else if (Input.GetKeyDown(KeyCode.J))
+        {
+            StartClient();
+        }
+    }
+
+    void StartHost()
+    {
+        if (NetworkManager.Singleton == null)
+        {
+            Debug.LogError("[NetworkTest] NetworkManager not ready!");
+            return;
+        }
+
+        if (NetworkManager.Singleton.IsClient || NetworkManager.Singleton.IsServer)
+        {
+            Debug.LogWarning("[NetworkTest] Already connected!");
+            return;
+        }
+
+        Debug.Log("[NetworkTest] Starting as HOST...");
+        networkStarted = true;
+        NetworkManager.Singleton.StartHost();
+    }
+
+    void StartClient()
+    {
+        if (NetworkManager.Singleton == null)
+        {
+            Debug.LogError("[NetworkTest] NetworkManager not ready!");
+            return;
+        }
+
+        if (NetworkManager.Singleton.IsClient || NetworkManager.Singleton.IsServer)
+        {
+            Debug.LogWarning("[NetworkTest] Already connected!");
+            return;
+        }
+
+        Debug.Log("[NetworkTest] Starting as CLIENT...");
+        networkStarted = true;
+        NetworkManager.Singleton.StartClient();
     }
 
     void OnGUI()
     {
-        // Show connection status
         GUIStyle style = new GUIStyle(GUI.skin.label);
         style.fontSize = 18;
         style.normal.textColor = Color.white;
@@ -287,76 +311,52 @@ public class SimpleNetworkTest : MonoBehaviour
         {
             status = "Press H = Host | J = Join";
         }
+        else if (!NetworkManager.Singleton.IsClient && !NetworkManager.Singleton.IsServer)
+        {
+            status = "Press H = Host | J = Join";
+        }
         else if (NetworkManager.Singleton.IsHost)
         {
             int clients = NetworkManager.Singleton.ConnectedClientsIds.Count;
+            status = $"HOST | Players: {clients}";
+            role = "ASTRONAUT";
+            roleColor = Color.cyan;
 
-            if (gameStarted)
-            {
-                status = $"PLAYING | Players: {clients}";
-                role = "ASTRONAUT";
-                roleColor = Color.cyan;
-            }
-            else
-            {
-                status = $"HOST | Players: {clients}";
-                role = "YOU ARE THE ASTRONAUT";
-                roleColor = Color.cyan;
-
-                if (clients < 2)
-                    status += "\nWaiting for player 2...";
-                else
-                    status += "\nGAME STARTING!";
-            }
+            if (clients < 2)
+                status += "\nWaiting for player 2...";
         }
         else if (NetworkManager.Singleton.IsConnectedClient)
         {
-            if (gameStarted)
-            {
-                status = "PLAYING";
-                role = "ALIEN";
-                roleColor = new Color(0.8f, 0.3f, 0.8f);
-            }
-            else
-            {
-                status = "CLIENT | Connected!";
-                role = "YOU ARE AN ALIEN";
-                roleColor = new Color(0.8f, 0.3f, 0.8f);
-            }
+            status = "CLIENT | Connected";
+            role = "ALIEN";
+            roleColor = new Color(0.8f, 0.3f, 0.8f);
         }
         else if (NetworkManager.Singleton.IsClient)
         {
             status = "Connecting...";
         }
-        else
-        {
-            status = "Press H = Host | J = Join";
-        }
 
-        // Draw background
-        GUI.Box(new Rect(10, 10, 320, 120), "");
+        GUI.Box(new Rect(10, 10, 320, 100), "");
         GUI.Label(new Rect(20, 15, 300, 30), status, style);
 
-        // Draw role
         if (!string.IsNullOrEmpty(role))
         {
             bigStyle.normal.textColor = roleColor;
             GUI.Label(new Rect(20, 50, 300, 40), role, bigStyle);
         }
 
-        // Instructions
         GUIStyle smallStyle = new GUIStyle(GUI.skin.label);
         smallStyle.fontSize = 12;
         smallStyle.normal.textColor = Color.gray;
-        GUI.Label(new Rect(20, 95, 300, 20), "Network test - Cubes show connected players", smallStyle);
+        GUI.Label(new Rect(20, 85, 300, 20), "Networked multiplayer test", smallStyle);
     }
 
     void OnDestroy()
     {
         if (NetworkManager.Singleton != null)
         {
+            NetworkManager.Singleton.OnServerStarted -= OnServerStarted;
             NetworkManager.Singleton.OnClientConnectedCallback -= OnClientConnected;
-            NetworkManager.Singleton.OnClientDisconnectCallback -= OnClientDisconnected;
         }
     }
 }

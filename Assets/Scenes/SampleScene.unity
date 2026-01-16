@@ -1204,8 +1204,7 @@ MonoBehaviour:
     NetworkTransport: {fileID: 459885621}
     PlayerPrefab: {fileID: 0}
     Prefabs:
-      NetworkPrefabsLists:
-      - {fileID: 11400000, guid: 877f74c723ab88c4abfecf3206c0ab6a, type: 2}
+      NetworkPrefabsLists: []
     TickRate: 30
     ClientConnectionBufferTimeout: 10
     ConnectionApproval: 0
@@ -4224,7 +4223,7 @@ GameObject:
   - component: {fileID: 1964602099}
   - component: {fileID: 1964602098}
   m_Layer: 0
-  m_Name: NetworkTest
+  m_Name: SimpleNetworkTest
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -4242,10 +4241,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 6ec8354c19c0dee428afa99ce3c47163, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  networkSpawnManager: {fileID: 0}
   astronautPrefab: {fileID: 1456307801489296658, guid: bad84f20874586149b72418962545c87, type: 3}
   alienPrefab: {fileID: 538128873290854545, guid: 066853dcf8a374a4db4f57308ca4b6e1, type: 3}
-  astronautSpawnPoint: {fileID: 0}
-  alienSpawnPoint: {fileID: 0}
+  npcPrefab: {fileID: 0}
+  npcCount: 12
 --- !u!4 &1964602099
 Transform:
   m_ObjectHideFlags: 0
