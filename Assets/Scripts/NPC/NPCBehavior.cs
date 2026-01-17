@@ -1,4 +1,4 @@
-using UnityEngine;
+﻿using UnityEngine;
 using Unity.Netcode;
 using System.Collections.Generic;
 
@@ -48,6 +48,9 @@ public class NPCBehavior : NetworkBehaviour, IDamageable
     private float quirkTargetRotation = 0f;
     private bool isRunning = false;
     private float runTimer = 0f;
+    private Vector2 moveInput;
+    private float inputChangeTimer = 0f;
+
 
     public enum QuirkType
     {
@@ -101,12 +104,13 @@ public class NPCBehavior : NetworkBehaviour, IDamageable
         characterController.radius = 0.4f;
         characterController.stepOffset = 0.1f;      // Very low - prevents climbing walls
         characterController.slopeLimit = 30f;       // Can't climb steep slopes
-        characterController.skinWidth = 0.08f;      // Collision skin
+        characterController.skinWidth = 0.02f;      // Collision skin
         characterController.minMoveDistance = 0f;   // Always process movement
 
         // Add a CapsuleCollider for physical collisions (CharacterControllers don't collide with each other)
         // This prevents players from walking through NPCs
         // NO Rigidbody needed - CharacterController will collide with static colliders
+        /*
         CapsuleCollider physicsCollider = GetComponent<CapsuleCollider>();
         if (physicsCollider == null)
         {
@@ -114,7 +118,7 @@ public class NPCBehavior : NetworkBehaviour, IDamageable
             physicsCollider.center = new Vector3(0, 1f, 0);
             physicsCollider.height = 2f;
             physicsCollider.radius = 0.4f;
-        }
+        }*/
 
         idleTimer = Random.Range(idleTimeMin, idleTimeMax);
         SetState(NPCState.Idle);
@@ -188,18 +192,84 @@ public class NPCBehavior : NetworkBehaviour, IDamageable
         // Proper gravity using CharacterController
         if (characterController.isGrounded)
         {
-            verticalVelocity = -2f; // Small downward force to stay grounded
+            if (verticalVelocity < 0f)
+                verticalVelocity = -1f;
         }
         else
         {
             verticalVelocity += gravity * Time.deltaTime;
         }
 
-        // Apply vertical movement
-        characterController.Move(new Vector3(0, verticalVelocity * Time.deltaTime, 0));
     }
 
+    private void MoveNPC(Vector3 horizontal)
+    {
+        // 1️⃣ MOVE HORIZONTAL (murs)
+        CollisionFlags sideFlags = characterController.Move(horizontal);
+
+        if ((sideFlags & CollisionFlags.Sides) != 0)
+        {
+            // Mur touché → stop + nouvelle direction
+            isRunning = false;
+            autoPatrolTarget = transform.position;
+            PickNewDirection();
+        }
+
+        // 2️⃣ MOVE VERTICAL (sol / plafond)
+        Vector3 verticalMove = Vector3.up * verticalVelocity * Time.deltaTime;
+        CollisionFlags verticalFlags = characterController.Move(verticalMove);
+
+        // Tête contre plafond → stop montée
+        if ((verticalFlags & CollisionFlags.Above) != 0)
+        {
+            verticalVelocity = 0f;
+        }
+
+        // Pieds au sol → reset gravité
+        if ((verticalFlags & CollisionFlags.Below) != 0)
+        {
+            if (verticalVelocity < 0f)
+                verticalVelocity = -1f;
+        }
+    }
+
+
+    private void PickNewDirection()
+    {
+        Vector3 randomDir = new Vector3(
+            Random.Range(-1f, 1f),
+            0f,
+            Random.Range(-1f, 1f)
+        ).normalized;
+
+        autoPatrolTarget = transform.position + randomDir * patrolRadius;
+        hasAutoTarget = true;
+    }
+
+
     // ==================== UNPREDICTABLE BEHAVIORS ====================
+    private void UpdateRandomInput()
+    {
+        inputChangeTimer -= Time.deltaTime;
+
+        if (inputChangeTimer <= 0f)
+        {
+            moveInput = Random.insideUnitCircle.normalized;
+            inputChangeTimer = Random.Range(1.5f, 4f);
+        }
+    }
+
+    private void MoveLikePlayer()
+    {
+        Vector3 move =
+            transform.forward * moveInput.y +
+            transform.right * moveInput.x;
+
+        float speed = isRunning ? runSpeed : walkSpeed;
+
+        characterController.SimpleMove(move * speed);
+    }
+
 
     private void TryStartQuirk()
     {
@@ -297,21 +367,11 @@ public class NPCBehavior : NetworkBehaviour, IDamageable
 
     private void HandleJumpQuirk()
     {
-        float jumpDuration = 0.5f;
-        float jumpHeight = 1.5f;
-
-        if (quirkTimer < jumpDuration)
+        if (characterController.isGrounded)
         {
-            // Parabolic jump
-            float t = quirkTimer / jumpDuration;
-            float height = 4f * jumpHeight * t * (1f - t); // Parabola
-            transform.position = new Vector3(transform.position.x, height, transform.position.z);
+            verticalVelocity = Mathf.Sqrt(1.5f * -2f * gravity);
         }
-        else
-        {
-            transform.position = new Vector3(transform.position.x, 0f, transform.position.z);
-            EndQuirk();
-        }
+        EndQuirk();
     }
 
     private void HandleSuddenStopQuirk()
@@ -414,26 +474,11 @@ public class NPCBehavior : NetworkBehaviour, IDamageable
             float moveDistance = currentSpeed * Time.deltaTime;
 
             // Check for obstacles before moving
-            if (IsPathBlocked(direction, moveDistance))
-            {
-                // Stop and wait, or pick new target
-                if (autoPatrol)
-                {
-                    hasAutoTarget = false;
-                    GenerateAutoPatrolTarget();
-                }
-                return;
-            }
-
-            Vector3 movement = direction * moveDistance;
+            
 
             if (characterController != null)
             {
-                characterController.Move(movement);
-            }
-            else
-            {
-                transform.position += movement;
+                MoveNPC(direction * moveDistance);
             }
 
             // Rotate towards target
@@ -482,58 +527,17 @@ public class NPCBehavior : NetworkBehaviour, IDamageable
 
             // Check for obstacles before moving (prevents passing through walls)
             float moveDistance = runSpeed * Time.deltaTime;
-            if (IsPathBlocked(runDir, moveDistance))
-            {
-                // Turn around if blocked
-                runDir = -runDir;
-                // Try a random direction if still blocked
-                if (IsPathBlocked(runDir, moveDistance))
-                {
-                    runDir = Quaternion.Euler(0, Random.Range(45f, 135f), 0) * runDir;
-                }
-            }
 
-            Vector3 movement = runDir * moveDistance;
 
             if (characterController != null)
             {
-                characterController.Move(movement);
-            }
-            else
-            {
-                transform.position += movement;
+                MoveNPC(runDir * moveDistance);
             }
         }
         else
         {
             SetState(NPCState.Idle);
         }
-    }
-
-    /// <summary>
-    /// Check if the path ahead is blocked by a collider
-    /// </summary>
-    private bool IsPathBlocked(Vector3 direction, float distance)
-    {
-        if (characterController == null) return false;
-
-        // Use SphereCast to detect obstacles (better for curved surfaces like sphere walls)
-        Vector3 origin = transform.position + Vector3.up * 1f;
-        float checkRadius = characterController.radius * 0.8f;
-        float checkDistance = distance + characterController.radius + 0.2f;
-
-        if (Physics.SphereCast(origin, checkRadius, direction, out RaycastHit hit, checkDistance))
-        {
-            // Ignore triggers, other NPCs, and players
-            if (!hit.collider.isTrigger &&
-                hit.collider.GetComponent<NPCBehavior>() == null &&
-                hit.collider.GetComponent<PlayerMovement>() == null &&
-                hit.collider.GetComponent<AlienController>() == null)
-            {
-                return true;
-            }
-        }
-        return false;
     }
 
     private void SetState(NPCState newState)

@@ -13,7 +13,8 @@ public class MapZone : MonoBehaviour
         Habitat,
         Research,
         Industrial,
-        Command
+        Command,
+        Tree
     }
 
     public enum ZoneShape
