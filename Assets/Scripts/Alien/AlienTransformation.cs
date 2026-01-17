@@ -11,8 +11,10 @@ using System.Collections;
 public class AlienTransformation : MonoBehaviour
 {
     [Header("Transformation Stats")]
-    public float normalSpeed = 5f;
-    public float transformedSpeed = 8f;
+    public float normalWalkSpeed = 2f;
+    public float normalRunSpeed = 5f;
+    public float transformedWalkSpeed = 4f;   // Faster walk when transformed
+    public float transformedRunSpeed = 8f;    // Faster run when transformed
     public float attackDamage = 35f;
     public float attackRange = 2.5f;
     public float attackCooldown = 0.8f;
@@ -321,7 +323,8 @@ public class AlienTransformation : MonoBehaviour
 
         if (alienController != null)
         {
-            alienController.moveSpeed = transformedSpeed;
+            alienController.walkSpeed = transformedWalkSpeed;
+            alienController.runSpeed = transformedRunSpeed;
         }
 
         // Create wall-hack system
@@ -567,7 +570,8 @@ public class AlienTransformation : MonoBehaviour
 
         if (alienController != null)
         {
-            alienController.moveSpeed = normalSpeed;
+            alienController.walkSpeed = normalWalkSpeed;
+            alienController.runSpeed = normalRunSpeed;
         }
 
         // Reset colors

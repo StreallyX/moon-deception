@@ -93,10 +93,27 @@ public class NPCBehavior : NetworkBehaviour, IDamageable
         if (characterController == null)
         {
             characterController = gameObject.AddComponent<CharacterController>();
-            // Only set defaults for newly created CC
-            characterController.center = new Vector3(0, 1f, 0);
-            characterController.height = 2f;
-            characterController.radius = 0.4f;
+        }
+
+        // FORCE CharacterController settings to prevent wall climbing/phasing
+        characterController.center = new Vector3(0, 1f, 0);
+        characterController.height = 2f;
+        characterController.radius = 0.4f;
+        characterController.stepOffset = 0.1f;      // Very low - prevents climbing walls
+        characterController.slopeLimit = 30f;       // Can't climb steep slopes
+        characterController.skinWidth = 0.08f;      // Collision skin
+        characterController.minMoveDistance = 0f;   // Always process movement
+
+        // Add a CapsuleCollider for physical collisions (CharacterControllers don't collide with each other)
+        // This prevents players from walking through NPCs
+        // NO Rigidbody needed - CharacterController will collide with static colliders
+        CapsuleCollider physicsCollider = GetComponent<CapsuleCollider>();
+        if (physicsCollider == null)
+        {
+            physicsCollider = gameObject.AddComponent<CapsuleCollider>();
+            physicsCollider.center = new Vector3(0, 1f, 0);
+            physicsCollider.height = 2f;
+            physicsCollider.radius = 0.4f;
         }
 
         idleTimer = Random.Range(idleTimeMin, idleTimeMax);
@@ -161,13 +178,25 @@ public class NPCBehavior : NetworkBehaviour, IDamageable
         }
     }
 
+    private float verticalVelocity = 0f;
+    private const float gravity = -20f;
+
     private void ApplyGravity()
     {
-        // Simple approach: keep NPCs at Y=0 (ground level)
-        if (transform.position.y != 0f)
+        if (characterController == null) return;
+
+        // Proper gravity using CharacterController
+        if (characterController.isGrounded)
         {
-            transform.position = new Vector3(transform.position.x, 0f, transform.position.z);
+            verticalVelocity = -2f; // Small downward force to stay grounded
         }
+        else
+        {
+            verticalVelocity += gravity * Time.deltaTime;
+        }
+
+        // Apply vertical movement
+        characterController.Move(new Vector3(0, verticalVelocity * Time.deltaTime, 0));
     }
 
     // ==================== UNPREDICTABLE BEHAVIORS ====================
@@ -382,7 +411,21 @@ public class NPCBehavior : NetworkBehaviour, IDamageable
 
             // Move NPC - use run speed if sprinting
             float currentSpeed = isRunning ? runSpeed : walkSpeed;
-            Vector3 movement = direction * currentSpeed * Time.deltaTime;
+            float moveDistance = currentSpeed * Time.deltaTime;
+
+            // Check for obstacles before moving
+            if (IsPathBlocked(direction, moveDistance))
+            {
+                // Stop and wait, or pick new target
+                if (autoPatrol)
+                {
+                    hasAutoTarget = false;
+                    GenerateAutoPatrolTarget();
+                }
+                return;
+            }
+
+            Vector3 movement = direction * moveDistance;
 
             if (characterController != null)
             {
@@ -437,8 +480,21 @@ public class NPCBehavior : NetworkBehaviour, IDamageable
                 runDir = new Vector3(Random.Range(-1f, 1f), 0f, Random.Range(-1f, 1f)).normalized;
             }
 
-            Vector3 movement = runDir * runSpeed * Time.deltaTime;
-            
+            // Check for obstacles before moving (prevents passing through walls)
+            float moveDistance = runSpeed * Time.deltaTime;
+            if (IsPathBlocked(runDir, moveDistance))
+            {
+                // Turn around if blocked
+                runDir = -runDir;
+                // Try a random direction if still blocked
+                if (IsPathBlocked(runDir, moveDistance))
+                {
+                    runDir = Quaternion.Euler(0, Random.Range(45f, 135f), 0) * runDir;
+                }
+            }
+
+            Vector3 movement = runDir * moveDistance;
+
             if (characterController != null)
             {
                 characterController.Move(movement);
@@ -452,6 +508,32 @@ public class NPCBehavior : NetworkBehaviour, IDamageable
         {
             SetState(NPCState.Idle);
         }
+    }
+
+    /// <summary>
+    /// Check if the path ahead is blocked by a collider
+    /// </summary>
+    private bool IsPathBlocked(Vector3 direction, float distance)
+    {
+        if (characterController == null) return false;
+
+        // Use SphereCast to detect obstacles (better for curved surfaces like sphere walls)
+        Vector3 origin = transform.position + Vector3.up * 1f;
+        float checkRadius = characterController.radius * 0.8f;
+        float checkDistance = distance + characterController.radius + 0.2f;
+
+        if (Physics.SphereCast(origin, checkRadius, direction, out RaycastHit hit, checkDistance))
+        {
+            // Ignore triggers, other NPCs, and players
+            if (!hit.collider.isTrigger &&
+                hit.collider.GetComponent<NPCBehavior>() == null &&
+                hit.collider.GetComponent<PlayerMovement>() == null &&
+                hit.collider.GetComponent<AlienController>() == null)
+            {
+                return true;
+            }
+        }
+        return false;
     }
 
     private void SetState(NPCState newState)

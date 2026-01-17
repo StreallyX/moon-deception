@@ -8,8 +8,12 @@ using UnityEngine;
 public class AlienController : MonoBehaviour
 {
     [Header("Movement")]
-    public float moveSpeed = 5f;
+    public float walkSpeed = 2f;      // Same as NPC walk speed
+    public float runSpeed = 5f;       // Sprint speed when holding Shift
+    public float moveSpeed = 2f;      // Current speed (updated at runtime)
     public float rotationSpeed = 10f;
+
+    private bool isRunning = false;
     
     [Header("Gravity")]
     public float gravity = -9.81f;
@@ -55,6 +59,7 @@ public class AlienController : MonoBehaviour
         characterController.radius = 0.5f;
         characterController.center = new Vector3(0, 1, 0); // Centered at y=1 for height=2 capsule (feet at 0, head at 2)
 
+
         // Ensure AlienHealth exists for damage system
         if (GetComponent<AlienHealth>() == null)
         {
@@ -66,6 +71,11 @@ public class AlienController : MonoBehaviour
     
     void Start()
     {
+        // Force walk/run speeds (override any serialized values)
+        walkSpeed = 2f;
+        runSpeed = 5f;
+        moveSpeed = walkSpeed;
+
         FindCamera();
 
         if (hungerSystem == null)
@@ -75,10 +85,10 @@ public class AlienController : MonoBehaviour
 
         yaw = transform.eulerAngles.y;
         velocity = Vector3.zero;
-        
+
         // Force Unity to resolve collision on first frame
         characterController.Move(Vector3.down * 0.5f);
-        
+
         Debug.Log("[AlienController] Initialized");
     }
     
@@ -348,11 +358,15 @@ public class AlienController : MonoBehaviour
             velocity.y += gravity * Time.deltaTime;
         }
         
-        // 5. Calculate horizontal movement (can be zero)
+        // 5. Check for sprint (Shift key)
+        isRunning = Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
+        moveSpeed = isRunning ? runSpeed : walkSpeed;
+
+        // 6. Calculate horizontal movement (can be zero)
         Vector3 move = transform.forward * v + transform.right * h;
         move = move.normalized;
-        
-        // 6. ALWAYS call Move() - even if move is zero!
+
+        // 7. ALWAYS call Move() - even if move is zero!
         characterController.Move(move * moveSpeed * Time.deltaTime);
         
         // 7. ALWAYS apply vertical velocity
@@ -427,4 +441,17 @@ public class AlienController : MonoBehaviour
         Debug.Log("[AlienController] Alien transforming!");
     }
 
+    void OnGUI()
+    {
+        if (!isControlled) return;
+
+        // Sprint hint - bottom left
+        GUIStyle hintStyle = new GUIStyle(GUI.skin.label);
+        hintStyle.fontSize = 16;
+        hintStyle.fontStyle = FontStyle.Bold;
+        hintStyle.normal.textColor = isRunning ? Color.yellow : Color.white;
+
+        string sprintText = isRunning ? "[SHIFT] COURSE" : "[SHIFT] Courir";
+        GUI.Label(new Rect(20, Screen.height - 40, 200, 30), sprintText, hintStyle);
+    }
 }

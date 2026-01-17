@@ -4,9 +4,12 @@ using UnityEngine;
 public class PlayerMovement : MonoBehaviour
 {
     [Header("Movement Settings")]
-    public float walkSpeed = 5f;
+    public float walkSpeed = 2f;      // Same as NPC walk speed
+    public float runSpeed = 5f;       // Sprint speed when holding Shift
     public float gravity = -9.81f;
     public float jumpHeight = 1.5f;
+
+    private bool isRunning = false;
 
     [Header("Mouse Look Settings")]
     public float mouseSensitivity = 2f;
@@ -43,11 +46,16 @@ public class PlayerMovement : MonoBehaviour
         controller.height = 2f;
         controller.radius = 0.5f;
         controller.center = new Vector3(0, 1, 0); // Center at y=1 for height=2 capsule (feet at 0, head at 2)
+
     }
 
 
     void Start()
     {
+        // Force walk/run speeds (override any serialized values)
+        walkSpeed = 2f;
+        runSpeed = 5f;
+
         // Auto-find camera if not assigned
         FindCamera();
 
@@ -187,11 +195,15 @@ public class PlayerMovement : MonoBehaviour
             velocity.y += gravity * Time.deltaTime;
         }
         
-        // 5. Calculate horizontal movement (can be zero)
+        // 5. Check for sprint (Shift key)
+        isRunning = Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
+        float currentSpeed = isRunning ? runSpeed : walkSpeed;
+
+        // 6. Calculate horizontal movement (can be zero)
         Vector3 move = transform.right * h + transform.forward * v;
 
-        // 6. ALWAYS call Move() - even if move is zero!
-        controller.Move(move * walkSpeed * Time.deltaTime);
+        // 7. ALWAYS call Move() - even if move is zero!
+        controller.Move(move * currentSpeed * Time.deltaTime);
 
         // 7. ALWAYS apply vertical velocity
         controller.Move(new Vector3(0, velocity.y, 0) * Time.deltaTime);
@@ -247,5 +259,19 @@ public class PlayerMovement : MonoBehaviour
     public Camera GetCamera()
     {
         return playerCamera;
+    }
+
+    void OnGUI()
+    {
+        if (!isControlled) return;
+
+        // Sprint hint - bottom left
+        GUIStyle hintStyle = new GUIStyle(GUI.skin.label);
+        hintStyle.fontSize = 16;
+        hintStyle.fontStyle = FontStyle.Bold;
+        hintStyle.normal.textColor = isRunning ? Color.yellow : Color.white;
+
+        string sprintText = isRunning ? "[SHIFT] COURSE" : "[SHIFT] Courir";
+        GUI.Label(new Rect(20, Screen.height - 40, 200, 30), sprintText, hintStyle);
     }
 }
