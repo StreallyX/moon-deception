@@ -1,5 +1,6 @@
 ﻿using UnityEngine;
 using Unity.Netcode;
+using Unity.Netcode.Components;
 using System.Collections.Generic;
 
 /// <summary>
@@ -93,6 +94,20 @@ public class NPCBehavior : NetworkBehaviour, IDamageable
     {
         startPosition = transform.position;
         animator = GetComponent<Animator>();
+        if (animator == null)
+        {
+            animator = GetComponentInChildren<Animator>();
+        }
+
+        // Check for NetworkAnimator (required for animation sync across network)
+        if (animator != null)
+        {
+            NetworkAnimator netAnimator = GetComponent<NetworkAnimator>();
+            if (netAnimator == null)
+            {
+                Debug.LogWarning($"[NPC] {npcName} is missing NetworkAnimator component! Add it to the prefab for animation sync.");
+            }
+        }
 
         // Get or create CharacterController
         characterController = GetComponent<CharacterController>();

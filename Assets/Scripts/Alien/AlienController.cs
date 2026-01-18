@@ -1,4 +1,6 @@
 using UnityEngine;
+using Unity.Netcode;
+using Unity.Netcode.Components;
 
 /// <summary>
 /// Third-person controller for the Alien player.
@@ -38,6 +40,7 @@ public class AlienController : MonoBehaviour
     private float pitch = 20f;
     private Vector3 velocity;
     private Animator animator;
+    private NetworkAnimator networkAnimator;
 
     public static AlienController ActiveAlien { get; private set; }
     public static bool IsAlienControlled => ActiveAlien != null && ActiveAlien.enabled;
@@ -86,6 +89,12 @@ public class AlienController : MonoBehaviour
 
         // Get animator for walk/run animations
         animator = GetComponentInChildren<Animator>();
+        networkAnimator = GetComponent<NetworkAnimator>();
+
+        if (networkAnimator == null)
+        {
+            Debug.LogWarning("[AlienController] No NetworkAnimator found! Animations won't sync in multiplayer.");
+        }
 
         yaw = transform.eulerAngles.y;
         velocity = Vector3.zero;

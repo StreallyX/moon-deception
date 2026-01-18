@@ -1,4 +1,6 @@
 using UnityEngine;
+using Unity.Netcode;
+using Unity.Netcode.Components;
 
 [RequireComponent(typeof(CharacterController))]
 public class PlayerMovement : MonoBehaviour
@@ -36,6 +38,9 @@ public class PlayerMovement : MonoBehaviour
 
     private bool isControlled = false;
     private Renderer[] modelRenderers; // Pour cacher le modèle en FPS
+    private WeaponViewModel weaponViewModel; // Pistolet vue FPS
+    private Animator animator; // Pour les animations de marche
+    private NetworkAnimator networkAnimator; // Pour sync les animations en réseau
 
     void Awake()
     {
@@ -65,8 +70,32 @@ public class PlayerMovement : MonoBehaviour
         // Force Unity to resolve collision on first frame
         controller.Move(Vector3.down * 0.5f);
 
-        // Cache all renderers for hiding in FPS mode
-        modelRenderers = GetComponentsInChildren<Renderer>(true);
+        // Find weapon view model (child of camera)
+        if (cameraTransform != null)
+        {
+            weaponViewModel = cameraTransform.GetComponentInChildren<WeaponViewModel>(true);
+        }
+
+        // Cache all renderers for hiding in FPS mode (exclude weapon)
+        CacheModelRenderers();
+
+        // Find animator for walk/run animations (visible to other players in multiplayer)
+        animator = GetComponentInChildren<Animator>();
+        networkAnimator = GetComponent<NetworkAnimator>();
+
+        if (animator != null)
+        {
+            Debug.Log($"[PlayerMovement] Found animator: {animator.gameObject.name}");
+        }
+        else
+        {
+            Debug.LogWarning("[PlayerMovement] No Animator found on player!");
+        }
+
+        if (networkAnimator == null)
+        {
+            Debug.LogWarning("[PlayerMovement] No NetworkAnimator found! Animations won't sync in multiplayer.");
+        }
 
         Debug.Log($"[PlayerMovement] Initialized. Camera: {cameraTransform?.name}");
     }
@@ -128,13 +157,50 @@ public class PlayerMovement : MonoBehaviour
     }
 
     /// <summary>
+    /// Cache all renderers except those under the camera (weapon, etc.)
+    /// </summary>
+    private void CacheModelRenderers()
+    {
+        var allRenderers = GetComponentsInChildren<Renderer>(true);
+        var bodyRenderers = new System.Collections.Generic.List<Renderer>();
+
+        foreach (var renderer in allRenderers)
+        {
+            // Skip any renderer that is a child of the camera (weapon, effects, etc.)
+            bool isUnderCamera = false;
+            if (cameraTransform != null)
+            {
+                Transform parent = renderer.transform;
+                while (parent != null)
+                {
+                    if (parent == cameraTransform)
+                    {
+                        isUnderCamera = true;
+                        break;
+                    }
+                    parent = parent.parent;
+                }
+            }
+
+            // Only cache body renderers (not camera children)
+            if (!isUnderCamera)
+            {
+                bodyRenderers.Add(renderer);
+            }
+        }
+
+        modelRenderers = bodyRenderers.ToArray();
+        Debug.Log($"[PlayerMovement] Cached {modelRenderers.Length} body renderers (excluded camera children)");
+    }
+
+    /// <summary>
     /// Show/hide the player's 3D model (for FPS view)
     /// </summary>
     private void SetModelVisible(bool visible)
     {
         if (modelRenderers == null)
         {
-            modelRenderers = GetComponentsInChildren<Renderer>(true);
+            CacheModelRenderers();
         }
 
         foreach (var renderer in modelRenderers)
@@ -144,7 +210,14 @@ public class PlayerMovement : MonoBehaviour
                 renderer.enabled = visible;
             }
         }
-        Debug.Log($"[PlayerMovement] Model visibility set to: {visible}");
+
+        // Show weapon only when we're the local player (body hidden)
+        if (weaponViewModel != null)
+        {
+            weaponViewModel.SetVisible(!visible); // Weapon visible when body is hidden
+        }
+
+        Debug.Log($"[PlayerMovement] Model visibility set to: {visible}, Weapon: {!visible}");
     }
 
     void FindCamera()
@@ -254,6 +327,9 @@ public class PlayerMovement : MonoBehaviour
             footstepTimer = footstepInterval * 0.5f; // Ready for next step
         }
         wasMoving = isMoving;
+
+        // 9. Update animation (visible to other players in multiplayer)
+        UpdateAnimation(isMoving ? currentSpeed : 0f);
     }
 
     void PlayFootstep()
@@ -262,6 +338,24 @@ public class PlayerMovement : MonoBehaviour
         {
             AudioManager.Instance.PlayFootstep(surfaceType);
         }
+    }
+
+    /// <summary>
+    /// Update animation based on movement speed (visible to other players)
+    /// </summary>
+    private void UpdateAnimation(float currentSpeed)
+    {
+        if (animator == null) return;
+
+        bool isMoving = currentSpeed > 0.1f;
+
+        // Set parameters on animator (NetworkAnimator will sync automatically)
+        animator.SetFloat("Speed", currentSpeed);
+        animator.SetBool("IsMoving", isMoving);
+
+        // Control animation playback speed: walk = 1x, run = faster
+        float speedRatio = currentSpeed / walkSpeed;
+        animator.speed = Mathf.Clamp(speedRatio, 0.5f, 2f);
     }
 
     void HandleMouseLook()
