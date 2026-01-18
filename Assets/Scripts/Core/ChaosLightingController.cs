@@ -32,6 +32,7 @@ public class ChaosLightingController : MonoBehaviour
     // Tracked lights
     private List<Light> sceneLights = new List<Light>();
     private Dictionary<Light, float> originalIntensities = new Dictionary<Light, float>();
+    private Dictionary<Light, Color> originalColors = new Dictionary<Light, Color>();
     private List<Light> emergencyLights = new List<Light>();
 
     // State
@@ -133,6 +134,7 @@ public class ChaosLightingController : MonoBehaviour
     {
         sceneLights.Clear();
         originalIntensities.Clear();
+        originalColors.Clear();
 
         Light[] allLights = FindObjectsOfType<Light>();
         foreach (var light in allLights)
@@ -143,6 +145,10 @@ public class ChaosLightingController : MonoBehaviour
 
             sceneLights.Add(light);
             originalIntensities[light] = light.intensity;
+            originalColors[light] = light.color; // Save original color!
+
+            // Disable shadows for performance
+            light.shadows = LightShadows.None;
         }
     }
 
@@ -332,14 +338,19 @@ public class ChaosLightingController : MonoBehaviour
             AudioManager.Instance.StartNormalAmbient();
         }
 
-        // Restore all lights
+        // Restore all lights to their original state
         foreach (var light in sceneLights)
         {
             if (light != null && originalIntensities.ContainsKey(light))
             {
                 light.intensity = originalIntensities[light];
-                // Reset color (emergency lights changed it)
-                light.color = Color.white;
+                // Restore ORIGINAL color (not white!)
+                if (originalColors.ContainsKey(light))
+                {
+                    light.color = originalColors[light];
+                }
+                // Keep shadows disabled for performance
+                light.shadows = LightShadows.None;
             }
         }
 
