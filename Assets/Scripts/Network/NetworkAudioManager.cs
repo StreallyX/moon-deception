@@ -701,6 +701,56 @@ public class NetworkAudioManager : MonoBehaviour
         }
     }
 
+    // ==================== BULLET EFFECTS ====================
+
+    /// <summary>
+    /// Spawn bullet tracer - visible to all players
+    /// </summary>
+    public void SpawnBulletTracer(Vector3 startPoint, Vector3 endPoint, bool isHit)
+    {
+        if (!ShouldSync())
+        {
+            // Single player - spawn locally
+            BulletTracerManager.Instance?.SpawnTracer(startPoint, endPoint, isHit);
+            return;
+        }
+
+        var player = FindAnyNetworkedPlayer();
+        if (player != null)
+        {
+            player.SpawnBulletTracerServerRpc(startPoint, endPoint, isHit);
+        }
+        else
+        {
+            // Fallback to local
+            BulletTracerManager.Instance?.SpawnTracer(startPoint, endPoint, isHit);
+        }
+    }
+
+    /// <summary>
+    /// Spawn impact effect - visible to all players
+    /// </summary>
+    public void SpawnImpactEffect(Vector3 position, Vector3 normal, bool isBlood)
+    {
+        if (!ShouldSync())
+        {
+            // Single player - spawn locally
+            BulletTracerManager.Instance?.SpawnImpact(position, normal, isBlood);
+            return;
+        }
+
+        var player = FindAnyNetworkedPlayer();
+        if (player != null)
+        {
+            player.SpawnImpactEffectServerRpc(position, normal, isBlood);
+        }
+        else
+        {
+            // Fallback to local
+            BulletTracerManager.Instance?.SpawnImpact(position, normal, isBlood);
+        }
+    }
+
     void OnDestroy()
     {
         if (Instance == this)

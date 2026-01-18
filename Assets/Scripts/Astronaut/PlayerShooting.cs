@@ -245,7 +245,8 @@ public class PlayerShooting : MonoBehaviour
         Ray ray = playerCamera.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0f));
         RaycastHit hit;
 
-        if (Physics.Raycast(ray, out hit, range, hitLayers))
+        // Raycast stops at the first collider it hits (walls, objects, NPCs, etc.)
+        if (Physics.Raycast(ray, out hit, range, hitLayers, QueryTriggerInteraction.Ignore))
         {
             // DEBUG: Log what we hit
             Debug.Log($"[Shooting] HIT: {hit.collider.gameObject.name} (Layer: {LayerMask.LayerToName(hit.collider.gameObject.layer)})");
@@ -321,13 +322,14 @@ public class PlayerShooting : MonoBehaviour
                 if (NetworkAudioManager.Instance != null)
                 {
                     NetworkAudioManager.Instance.PlayBulletImpact("Flesh", hit.point);
+                    // Spawn networked impact effect (visible to all players)
+                    NetworkAudioManager.Instance.SpawnImpactEffect(hit.point, hit.normal, true);
                 }
                 else if (AudioManager.Instance != null)
                 {
                     AudioManager.Instance.PlayBulletImpact("Flesh", hit.point);
+                    SpawnImpactEffect(hit.point, hit.normal, true);
                 }
-
-                SpawnImpactEffect(hit.point, hit.normal, true);
 
                 // Handle stress changes
                 if (StressSystem.Instance != null)
@@ -354,22 +356,47 @@ public class PlayerShooting : MonoBehaviour
                 if (NetworkAudioManager.Instance != null)
                 {
                     NetworkAudioManager.Instance.PlayBulletImpact(surfaceType, hit.point);
+                    // Spawn networked impact effect (visible to all players)
+                    NetworkAudioManager.Instance.SpawnImpactEffect(hit.point, hit.normal, false);
                 }
                 else if (AudioManager.Instance != null)
                 {
                     AudioManager.Instance.PlayBulletImpact(surfaceType, hit.point);
+                    SpawnImpactEffect(hit.point, hit.normal, false);
                 }
+            }
 
-                SpawnImpactEffect(hit.point, hit.normal, false);
+            // Spawn bullet tracer (visible to all players)
+            Vector3 muzzlePos = playerCamera.transform.position + playerCamera.transform.forward * 0.5f;
+            if (NetworkAudioManager.Instance != null)
+            {
+                NetworkAudioManager.Instance.SpawnBulletTracer(muzzlePos, hit.point, true);
+            }
+            else if (BulletTracerManager.Instance != null)
+            {
+                BulletTracerManager.Instance.SpawnTracer(muzzlePos, hit.point, true);
             }
         }
         else
         {
+            // Miss - no hit
+            Vector3 endPoint = ray.origin + ray.direction * range;
+
             if (showDebugRay)
             {
-                Vector3 endPoint = ray.origin + ray.direction * range;
                 Debug.DrawLine(ray.origin, endPoint, missColor, debugRayDuration);
                 ShowShotLine(ray.origin, endPoint, missColor);
+            }
+
+            // Spawn bullet tracer for miss (visible to all players)
+            Vector3 muzzlePos = playerCamera.transform.position + playerCamera.transform.forward * 0.5f;
+            if (NetworkAudioManager.Instance != null)
+            {
+                NetworkAudioManager.Instance.SpawnBulletTracer(muzzlePos, endPoint, false);
+            }
+            else if (BulletTracerManager.Instance != null)
+            {
+                BulletTracerManager.Instance.SpawnTracer(muzzlePos, endPoint, false);
             }
         }
     }

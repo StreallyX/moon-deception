@@ -1236,4 +1236,40 @@ public class NetworkedPlayer : NetworkBehaviour
     }
 
     #endregion
+
+    #region Bullet Tracer RPCs
+
+    /// <summary>
+    /// Spawn bullet tracer visible to all players
+    /// </summary>
+    [ServerRpc(RequireOwnership = false)]
+    public void SpawnBulletTracerServerRpc(Vector3 startPoint, Vector3 endPoint, bool isHit)
+    {
+        SpawnBulletTracerClientRpc(startPoint, endPoint, isHit);
+    }
+
+    [ClientRpc]
+    private void SpawnBulletTracerClientRpc(Vector3 startPoint, Vector3 endPoint, bool isHit)
+    {
+        // Create bullet tracer effect on all clients
+        BulletTracerManager.Instance?.SpawnTracer(startPoint, endPoint, isHit);
+    }
+
+    /// <summary>
+    /// Spawn impact effect visible to all players
+    /// </summary>
+    [ServerRpc(RequireOwnership = false)]
+    public void SpawnImpactEffectServerRpc(Vector3 position, Vector3 normal, bool isBlood)
+    {
+        SpawnImpactEffectClientRpc(position, normal, isBlood);
+    }
+
+    [ClientRpc]
+    private void SpawnImpactEffectClientRpc(Vector3 position, Vector3 normal, bool isBlood)
+    {
+        // Create impact effect on all clients
+        BulletTracerManager.Instance?.SpawnImpact(position, normal, isBlood);
+    }
+
+    #endregion
 }

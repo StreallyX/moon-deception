@@ -21,6 +21,7 @@ public class GameBootstrap : MonoBehaviour
     public bool createNetworkManager = true;
     public bool createNetworkGameManager = true;
     public bool createRoleAnnouncementUI = true;
+    public bool createBulletTracerManager = true;
 
     [Header("Player Setup")]
     public bool addCameraShakeToPlayer = true;
@@ -126,6 +127,15 @@ public class GameBootstrap : MonoBehaviour
             bloodDecalObj.AddComponent<BloodDecalManager>();
             DontDestroyOnLoad(bloodDecalObj);
             Debug.Log("[GameBootstrap] Created BloodDecalManager");
+        }
+
+        // Bullet Tracer Manager
+        if (createBulletTracerManager && BulletTracerManager.Instance == null)
+        {
+            GameObject bulletTracerObj = new GameObject("BulletTracerManager");
+            bulletTracerObj.AddComponent<BulletTracerManager>();
+            DontDestroyOnLoad(bulletTracerObj);
+            Debug.Log("[GameBootstrap] Created BulletTracerManager");
         }
 
         // Network Manager
