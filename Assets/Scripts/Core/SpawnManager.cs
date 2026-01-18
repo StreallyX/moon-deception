@@ -6,10 +6,52 @@ using Unity.Netcode;
 /// <summary>
 /// Handles spawning of entities (NPCs, defense zones, interactables) with randomization rules.
 /// Works with MapManager to respect zone boundaries and distance requirements.
+///
+/// SPAWN POINT SYSTEM:
+/// - Each NPC spawn point holds exactly 1 NPC
+/// - Players (astronaut/alien) take a random spawn point and replace the NPC
+/// - Late joiners despawn an existing NPC and take their place
 /// </summary>
 public class SpawnManager : MonoBehaviour
 {
     public static SpawnManager Instance { get; private set; }
+
+    // ==================== SPAWN POINT TRACKING ====================
+
+    /// <summary>
+    /// Tracks what occupies each spawn point
+    /// </summary>
+    public enum SpawnPointOccupant
+    {
+        Empty,
+        NPC,
+        Player
+    }
+
+    /// <summary>
+    /// Info about a spawn point and its current occupant
+    /// </summary>
+    [System.Serializable]
+    public class SpawnPointInfo
+    {
+        public Transform spawnPoint;
+        public SpawnPointOccupant occupant = SpawnPointOccupant.Empty;
+        public GameObject occupantObject; // The NPC or Player at this point
+        public string zoneName;
+
+        public SpawnPointInfo(Transform point, string zone)
+        {
+            spawnPoint = point;
+            zoneName = zone;
+            occupant = SpawnPointOccupant.Empty;
+            occupantObject = null;
+        }
+    }
+
+    [Header("Spawn Point Tracking")]
+    [SerializeField] private List<SpawnPointInfo> allSpawnPoints = new List<SpawnPointInfo>();
+
+    // ==================== SETTINGS ====================
 
     [Header("Spawn Settings")]
     [Tooltip("Number of aliens to assign among NPCs")]
@@ -34,6 +76,7 @@ public class SpawnManager : MonoBehaviour
 
     [Header("Events")]
     public UnityEvent OnSpawningComplete;
+    public UnityEvent<GameObject, Vector3> OnPlayerSpawned; // Player object, spawn position
 
     [Header("Debug")]
     [SerializeField] private List<DefenseZone> spawnedDefenseZones = new List<DefenseZone>();
@@ -266,14 +309,74 @@ public class SpawnManager : MonoBehaviour
         Debug.LogWarning("[SpawnManager] Timeout waiting for network role determination");
     }
 
-    // ==================== NPC SPAWNING ====================
+    // ==================== SPAWN POINT COLLECTION ====================
 
-    [Header("NPC Settings")]
-    public int npcsPerZone = 5;
+    /// <summary>
+    /// Collect all NPC spawn points from all zones
+    /// </summary>
+    public void CollectAllSpawnPoints()
+    {
+        allSpawnPoints.Clear();
+
+        if (MapManager.Instance == null || MapManager.Instance.ZoneCount == 0)
+        {
+            Debug.LogWarning("[SpawnManager] No zones found for spawn point collection");
+            return;
+        }
+
+        foreach (var zone in MapManager.Instance.AllZones)
+        {
+            if (zone == null || zone.npcSpawnPoints == null) continue;
+
+            foreach (var spawnPoint in zone.npcSpawnPoints)
+            {
+                if (spawnPoint != null)
+                {
+                    allSpawnPoints.Add(new SpawnPointInfo(spawnPoint, zone.zoneName));
+                }
+            }
+        }
+
+        Debug.Log($"[SpawnManager] Collected {allSpawnPoints.Count} spawn points from {MapManager.Instance.ZoneCount} zones");
+    }
+
+    /// <summary>
+    /// Get list of spawn points with NPCs (for late join replacement)
+    /// </summary>
+    public List<SpawnPointInfo> GetNPCOccupiedSpawnPoints()
+    {
+        List<SpawnPointInfo> npcPoints = new List<SpawnPointInfo>();
+        foreach (var info in allSpawnPoints)
+        {
+            if (info.occupant == SpawnPointOccupant.NPC && info.occupantObject != null)
+            {
+                npcPoints.Add(info);
+            }
+        }
+        return npcPoints;
+    }
+
+    /// <summary>
+    /// Get list of empty spawn points
+    /// </summary>
+    public List<SpawnPointInfo> GetEmptySpawnPoints()
+    {
+        List<SpawnPointInfo> emptyPoints = new List<SpawnPointInfo>();
+        foreach (var info in allSpawnPoints)
+        {
+            if (info.occupant == SpawnPointOccupant.Empty)
+            {
+                emptyPoints.Add(info);
+            }
+        }
+        return emptyPoints;
+    }
+
+    // ==================== NPC SPAWNING ====================
 
     /// <summary>
     /// Spawn NPCs locally (for clients or single player)
-    /// Uses deterministic positioning based on zone
+    /// Spawns exactly 1 NPC per spawn point defined in zones
     /// </summary>
     public void SpawnNPCsLocally()
     {
@@ -291,43 +394,45 @@ public class SpawnManager : MonoBehaviour
         }
 
         hasSpawnedNPCs = true;
+
+        // First collect all spawn points
+        CollectAllSpawnPoints();
+
+        if (allSpawnPoints.Count == 0)
+        {
+            Debug.LogWarning("[SpawnManager] No spawn points found in zones! Add npcSpawnPoints to your MapZones.");
+            return;
+        }
+
         int totalSpawned = 0;
 
-        foreach (var zone in MapManager.Instance.AllZones)
+        // Spawn 1 NPC at each spawn point
+        for (int i = 0; i < allSpawnPoints.Count; i++)
         {
-            if (zone == null) continue;
+            var spawnInfo = allSpawnPoints[i];
+            if (spawnInfo.spawnPoint == null) continue;
 
-            // Use zone name as seed for deterministic positioning
-            int seed = zone.zoneName.GetHashCode();
-            Random.InitState(seed);
+            Vector3 pos = spawnInfo.spawnPoint.position;
+            string npcName = $"Crew_{spawnInfo.zoneName}_{i + 1}";
 
-            for (int i = 0; i < npcsPerZone; i++)
+            GameObject npcObj = CreateLocalNPC(pos, npcName);
+
+            if (npcObj != null)
             {
-                Vector3 pos = GetRandomPositionInZone(zone);
-                string npcName = $"Crew_{zone.zoneName}_{i + 1}";
-
-                CreateLocalNPC(pos, npcName);
+                // Track this spawn point as occupied by NPC
+                spawnInfo.occupant = SpawnPointOccupant.NPC;
+                spawnInfo.occupantObject = npcObj;
                 totalSpawned++;
             }
         }
 
-        // Reset random state
-        Random.InitState((int)System.DateTime.Now.Ticks);
-
-        Debug.Log($"[SpawnManager] Spawned {totalSpawned} NPCs locally");
+        Debug.Log($"[SpawnManager] Spawned {totalSpawned} NPCs (1 per spawn point)");
     }
 
-    Vector3 GetRandomPositionInZone(MapZone zone)
-    {
-        Bounds bounds = zone.Bounds;
-        float x = Random.Range(bounds.min.x + 2f, bounds.max.x - 2f);
-        float z = Random.Range(bounds.min.z + 2f, bounds.max.z - 2f);
-        float y = 1f; // Ground level
-
-        return new Vector3(x, y, z);
-    }
-
-    void CreateLocalNPC(Vector3 position, string npcName)
+    /// <summary>
+    /// Create a local NPC and return the GameObject
+    /// </summary>
+    GameObject CreateLocalNPC(Vector3 position, string npcName)
     {
         GameObject npcObj;
 
@@ -380,6 +485,135 @@ public class SpawnManager : MonoBehaviour
         {
             field.SetValue(npc, npcName);
         }
+
+        return npcObj;
+    }
+
+    // ==================== PLAYER SPAWNING ====================
+
+    /// <summary>
+    /// Get a random spawn point for a new player.
+    /// The NPC at that spawn point will NOT be spawned (or will be removed if already exists).
+    /// Returns null if no spawn points available.
+    /// </summary>
+    public SpawnPointInfo ReserveSpawnPointForPlayer()
+    {
+        // If spawn points not collected yet, do it now
+        if (allSpawnPoints.Count == 0)
+        {
+            CollectAllSpawnPoints();
+        }
+
+        // Ensure random is truly random (not using deterministic seed)
+        Random.InitState((int)System.DateTime.Now.Ticks + System.Environment.TickCount);
+
+        // First try to find an empty spawn point
+        var emptyPoints = GetEmptySpawnPoints();
+        if (emptyPoints.Count > 0)
+        {
+            // Shuffle the list for extra randomness
+            ShuffleList(emptyPoints);
+            var chosen = emptyPoints[0];
+            chosen.occupant = SpawnPointOccupant.Player;
+            Debug.Log($"[SpawnManager] Reserved empty spawn point for player at {chosen.spawnPoint.position} (zone: {chosen.zoneName})");
+            return chosen;
+        }
+
+        // No empty points - take over a NPC spawn point
+        var npcPoints = GetNPCOccupiedSpawnPoints();
+        if (npcPoints.Count > 0)
+        {
+            // Shuffle the list for extra randomness
+            ShuffleList(npcPoints);
+            var chosen = npcPoints[0];
+
+            // Destroy the NPC at this point
+            if (chosen.occupantObject != null)
+            {
+                Debug.Log($"[SpawnManager] Despawning NPC '{chosen.occupantObject.name}' to make room for player");
+                Destroy(chosen.occupantObject);
+            }
+
+            chosen.occupant = SpawnPointOccupant.Player;
+            chosen.occupantObject = null;
+            Debug.Log($"[SpawnManager] Reserved NPC spawn point for player at {chosen.spawnPoint.position} (zone: {chosen.zoneName})");
+            return chosen;
+        }
+
+        Debug.LogWarning("[SpawnManager] No spawn points available for player!");
+        return null;
+    }
+
+    /// <summary>
+    /// Spawn a player at a reserved spawn point.
+    /// Call ReserveSpawnPointForPlayer() first to get the spawn point.
+    /// </summary>
+    public void SpawnPlayerAtPoint(GameObject player, SpawnPointInfo spawnInfo)
+    {
+        if (spawnInfo == null || spawnInfo.spawnPoint == null)
+        {
+            Debug.LogError("[SpawnManager] Invalid spawn point for player!");
+            return;
+        }
+
+        // Move player to spawn point
+        Vector3 spawnPos = spawnInfo.spawnPoint.position;
+        player.transform.position = spawnPos;
+
+        // Update tracking
+        spawnInfo.occupant = SpawnPointOccupant.Player;
+        spawnInfo.occupantObject = player;
+
+        Debug.Log($"[SpawnManager] Player '{player.name}' spawned at {spawnPos} (zone: {spawnInfo.zoneName})");
+        OnPlayerSpawned?.Invoke(player, spawnPos);
+    }
+
+    /// <summary>
+    /// Called when a player joins late - finds an NPC to replace.
+    /// Returns the spawn point where player should spawn, or null if failed.
+    /// </summary>
+    public SpawnPointInfo HandleLateJoin()
+    {
+        var npcPoints = GetNPCOccupiedSpawnPoints();
+
+        if (npcPoints.Count == 0)
+        {
+            Debug.LogWarning("[SpawnManager] Late join failed: no NPCs to replace!");
+            return null;
+        }
+
+        // Pick a random NPC to replace
+        int randomIndex = Random.Range(0, npcPoints.Count);
+        var chosen = npcPoints[randomIndex];
+
+        // Destroy the NPC
+        if (chosen.occupantObject != null)
+        {
+            Debug.Log($"[SpawnManager] Late join: despawning NPC '{chosen.occupantObject.name}'");
+            Destroy(chosen.occupantObject);
+        }
+
+        chosen.occupant = SpawnPointOccupant.Player;
+        chosen.occupantObject = null;
+
+        return chosen;
+    }
+
+    /// <summary>
+    /// Get the position for initial player spawn (before game starts).
+    /// Reserves a spawn point and returns position.
+    /// </summary>
+    public Vector3 GetPlayerSpawnPosition()
+    {
+        var spawnInfo = ReserveSpawnPointForPlayer();
+        if (spawnInfo != null && spawnInfo.spawnPoint != null)
+        {
+            return spawnInfo.spawnPoint.position;
+        }
+
+        // Fallback to center
+        Debug.LogWarning("[SpawnManager] No spawn point available, using fallback position");
+        return Vector3.zero;
     }
 
     /// <summary>
@@ -818,4 +1052,38 @@ public class SpawnManager : MonoBehaviour
             Instance = null;
         }
     }
+
+    // ==================== PUBLIC GETTERS ====================
+
+    /// <summary>
+    /// Total number of spawn points collected from all zones
+    /// </summary>
+    public int SpawnPointCount => allSpawnPoints.Count;
+
+    /// <summary>
+    /// Number of NPCs currently spawned
+    /// </summary>
+    public int NPCCount => GetNPCOccupiedSpawnPoints().Count;
+
+    /// <summary>
+    /// Number of players currently spawned
+    /// </summary>
+    public int PlayerCount
+    {
+        get
+        {
+            int count = 0;
+            foreach (var info in allSpawnPoints)
+            {
+                if (info.occupant == SpawnPointOccupant.Player)
+                    count++;
+            }
+            return count;
+        }
+    }
+
+    /// <summary>
+    /// All spawn point info (read-only access)
+    /// </summary>
+    public List<SpawnPointInfo> AllSpawnPoints => allSpawnPoints;
 }

@@ -227,33 +227,282 @@ public class SteamLobbyManager : MonoBehaviour
     IEnumerator LoadGameAndStartNetwork(bool asHost)
     {
         // Load game scene
+        Debug.Log($"[SteamLobby] Loading scene: {gameSceneName}...");
         AsyncOperation asyncLoad = SceneManager.LoadSceneAsync(gameSceneName);
         while (!asyncLoad.isDone)
         {
             yield return null;
         }
 
-        // Wait a frame for scene to initialize
-        yield return null;
+        Debug.Log("[SteamLobby] Scene loaded, waiting for initialization...");
 
-        // Start network
-        if (NetworkManager.Singleton != null)
+        // Wait for scene to fully initialize (managers, zones, etc.)
+        float initDelay = asHost ? 3f : 1f; // Host needs more time to setup
+        yield return new WaitForSeconds(initDelay);
+
+        // Wait for NetworkManager
+        float timeout = 5f;
+        float elapsed = 0f;
+        while (NetworkManager.Singleton == null && elapsed < timeout)
         {
-            if (asHost)
-            {
-                Debug.Log("[SteamLobby] Starting as HOST");
-                NetworkManager.Singleton.StartHost();
-            }
-            else
-            {
-                Debug.Log("[SteamLobby] Starting as CLIENT");
-                NetworkManager.Singleton.StartClient();
-            }
+            yield return new WaitForSeconds(0.1f);
+            elapsed += 0.1f;
+        }
+
+        if (NetworkManager.Singleton == null)
+        {
+            Debug.LogError("[SteamLobby] NetworkManager not found after timeout!");
+            yield break;
+        }
+
+        // Try to get Steam transport first (preferred for internet play)
+        var steamTransport = NetworkManager.Singleton.GetComponent<SteamNetworkTransport>();
+
+        // If Steam transport doesn't exist, create it!
+        if (steamTransport == null && SteamManager.Initialized)
+        {
+            Debug.Log("[SteamLobby] Adding SteamNetworkTransport to NetworkManager...");
+            steamTransport = NetworkManager.Singleton.gameObject.AddComponent<SteamNetworkTransport>();
+        }
+
+        if (steamTransport != null && SteamManager.Initialized)
+        {
+            // Use Steam Relay - no port forwarding needed!
+            yield return StartCoroutine(StartWithSteamTransport(steamTransport, asHost));
         }
         else
         {
-            Debug.LogError("[SteamLobby] NetworkManager not found in game scene!");
+            // Fallback to Unity Transport (for LAN or testing)
+            Debug.LogWarning("[SteamLobby] Steam not available, falling back to UnityTransport (LAN only)");
+            var unityTransport = NetworkManager.Singleton.GetComponent<Unity.Netcode.Transports.UTP.UnityTransport>();
+            if (unityTransport == null)
+            {
+                unityTransport = NetworkManager.Singleton.gameObject.AddComponent<Unity.Netcode.Transports.UTP.UnityTransport>();
+            }
+            yield return StartCoroutine(StartWithUnityTransport(unityTransport, asHost));
         }
+    }
+
+    /// <summary>
+    /// Start networking using Steam Relay (P2P via SteamID)
+    /// </summary>
+    IEnumerator StartWithSteamTransport(SteamNetworkTransport transport, bool asHost)
+    {
+        Debug.Log($"[SteamLobby] Using Steam Relay! SteamManager.Initialized={SteamManager.Initialized}");
+
+        if (asHost)
+        {
+            // HOST: Start hosting and store our SteamID in lobby
+            CSteamID mySteamID = SteamUser.GetSteamID();
+            Debug.Log($"[SteamLobby] Starting as HOST with Steam Relay... My SteamID: {mySteamID}");
+
+            // Set this transport as active
+            NetworkManager.Singleton.NetworkConfig.NetworkTransport = transport;
+
+            Debug.Log("[SteamLobby] HOST: Starting NetworkManager.StartHost()...");
+            NetworkManager.Singleton.StartHost();
+
+            // Store host SteamID in lobby data for clients
+            CSteamID hostSteamID = SteamUser.GetSteamID();
+            if (InLobby)
+            {
+                SteamMatchmaking.SetLobbyData(CurrentLobbyID, "hostSteamID", hostSteamID.m_SteamID.ToString());
+                SteamMatchmaking.SetLobbyData(CurrentLobbyID, "useSteamRelay", "1");
+                Debug.Log($"[SteamLobby] HOST started with Steam Relay. SteamID: {hostSteamID}");
+            }
+
+            // Wait for NetworkSpawnManager to be ready
+            yield return new WaitForSeconds(2f);
+            Debug.Log("[SteamLobby] HOST fully ready with Steam Relay!");
+        }
+        else
+        {
+            // CLIENT: Get host SteamID from lobby and connect via Steam
+            CSteamID mySteamID = SteamUser.GetSteamID();
+            Debug.Log($"[SteamLobby] Starting as CLIENT with Steam Relay... My SteamID: {mySteamID}");
+
+            CSteamID hostSteamID = CSteamID.Nil;
+
+            if (InLobby)
+            {
+                string hostSteamIDStr = SteamMatchmaking.GetLobbyData(CurrentLobbyID, "hostSteamID");
+                Debug.Log($"[SteamLobby] CLIENT: Got hostSteamID from lobby data: '{hostSteamIDStr}'");
+
+                if (!string.IsNullOrEmpty(hostSteamIDStr) && ulong.TryParse(hostSteamIDStr, out ulong steamIdValue))
+                {
+                    hostSteamID = new CSteamID(steamIdValue);
+                }
+            }
+            else
+            {
+                Debug.LogWarning("[SteamLobby] CLIENT: Not in lobby!");
+            }
+
+            // Wait for host to save their SteamID (might not be ready immediately)
+            float waitForHost = 0f;
+            while (!hostSteamID.IsValid() && waitForHost < 10f)
+            {
+                yield return new WaitForSeconds(0.5f);
+                waitForHost += 0.5f;
+
+                if (InLobby)
+                {
+                    string hostSteamIDStr = SteamMatchmaking.GetLobbyData(CurrentLobbyID, "hostSteamID");
+                    if (!string.IsNullOrEmpty(hostSteamIDStr) && ulong.TryParse(hostSteamIDStr, out ulong steamIdValue))
+                    {
+                        hostSteamID = new CSteamID(steamIdValue);
+                        Debug.Log($"[SteamLobby] CLIENT: Got host SteamID after {waitForHost}s: {hostSteamID.m_SteamID}");
+                    }
+                }
+            }
+
+            if (!hostSteamID.IsValid())
+            {
+                Debug.LogError("[SteamLobby] No valid host SteamID found in lobby data after 10s! Cannot connect via Steam Relay.");
+                yield break;
+            }
+
+            Debug.Log($"[SteamLobby] CLIENT connecting via Steam Relay to host SteamID: {hostSteamID.m_SteamID}");
+
+            // Set host SteamID on transport and connect
+            transport.HostSteamID = hostSteamID;
+            NetworkManager.Singleton.NetworkConfig.NetworkTransport = transport;
+
+            Debug.Log("[SteamLobby] CLIENT: Starting NetworkManager.StartClient()...");
+            NetworkManager.Singleton.StartClient();
+
+            // Wait for connection
+            float connectTimeout = 30f; // Steam P2P might take longer
+            float connectElapsed = 0f;
+            while (!NetworkManager.Singleton.IsConnectedClient && connectElapsed < connectTimeout)
+            {
+                yield return new WaitForSeconds(0.5f);
+                connectElapsed += 0.5f;
+                if ((int)connectElapsed % 5 == 0)
+                {
+                    Debug.Log($"[SteamLobby] CLIENT waiting for Steam Relay connection... ({connectElapsed}s)");
+                }
+            }
+
+            if (NetworkManager.Singleton.IsConnectedClient)
+            {
+                Debug.Log("[SteamLobby] CLIENT connected via Steam Relay!");
+            }
+            else
+            {
+                Debug.LogError("[SteamLobby] CLIENT failed to connect via Steam Relay!");
+            }
+        }
+    }
+
+    /// <summary>
+    /// Fallback: Start networking using Unity Transport (IP-based, LAN only)
+    /// </summary>
+    IEnumerator StartWithUnityTransport(Unity.Netcode.Transports.UTP.UnityTransport transport, bool asHost)
+    {
+        if (asHost)
+        {
+            Debug.Log("[SteamLobby] Starting as HOST with UnityTransport (LAN)...");
+
+            transport.ConnectionData.Address = "0.0.0.0";
+            transport.ConnectionData.Port = 7777;
+
+            NetworkManager.Singleton.StartHost();
+
+            string hostIP = GetLocalIPAddress();
+            if (InLobby)
+            {
+                SteamMatchmaking.SetLobbyData(CurrentLobbyID, "hostIP", hostIP);
+                SteamMatchmaking.SetLobbyData(CurrentLobbyID, "hostPort", "7777");
+                SteamMatchmaking.SetLobbyData(CurrentLobbyID, "useSteamRelay", "0");
+                Debug.Log($"[SteamLobby] HOST started (LAN). IP: {hostIP}:7777");
+            }
+
+            yield return new WaitForSeconds(2f);
+            Debug.Log("[SteamLobby] HOST fully ready (LAN)!");
+        }
+        else
+        {
+            Debug.Log("[SteamLobby] Starting as CLIENT with UnityTransport (LAN)...");
+
+            string hostIP = "";
+            string hostPort = "7777";
+
+            if (InLobby)
+            {
+                hostIP = SteamMatchmaking.GetLobbyData(CurrentLobbyID, "hostIP");
+                hostPort = SteamMatchmaking.GetLobbyData(CurrentLobbyID, "hostPort");
+            }
+
+            if (string.IsNullOrEmpty(hostIP))
+            {
+                Debug.LogError("[SteamLobby] No host IP found!");
+                hostIP = "127.0.0.1";
+            }
+
+            Debug.Log($"[SteamLobby] CLIENT connecting to: {hostIP}:{hostPort}");
+
+            transport.ConnectionData.Address = hostIP;
+            if (ushort.TryParse(hostPort, out ushort port))
+            {
+                transport.ConnectionData.Port = port;
+            }
+
+            NetworkManager.Singleton.StartClient();
+
+            float connectTimeout = 10f;
+            float connectElapsed = 0f;
+            while (!NetworkManager.Singleton.IsConnectedClient && connectElapsed < connectTimeout)
+            {
+                yield return new WaitForSeconds(0.5f);
+                connectElapsed += 0.5f;
+            }
+
+            if (NetworkManager.Singleton.IsConnectedClient)
+            {
+                Debug.Log("[SteamLobby] CLIENT connected (LAN)!");
+            }
+            else
+            {
+                Debug.LogError("[SteamLobby] CLIENT failed to connect (LAN)!");
+            }
+        }
+    }
+
+    /// <summary>
+    /// Get local IP address for LAN play
+    /// </summary>
+    string GetLocalIPAddress()
+    {
+        try
+        {
+            var host = System.Net.Dns.GetHostEntry(System.Net.Dns.GetHostName());
+            foreach (var ip in host.AddressList)
+            {
+                if (ip.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork)
+                {
+                    // Prefer 192.168.x.x or 10.x.x.x addresses
+                    string ipStr = ip.ToString();
+                    if (ipStr.StartsWith("192.168.") || ipStr.StartsWith("10."))
+                    {
+                        return ipStr;
+                    }
+                }
+            }
+            // Fallback to first IPv4
+            foreach (var ip in host.AddressList)
+            {
+                if (ip.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork)
+                {
+                    return ip.ToString();
+                }
+            }
+        }
+        catch (System.Exception e)
+        {
+            Debug.LogError($"[SteamLobby] Failed to get local IP: {e.Message}");
+        }
+        return "127.0.0.1";
     }
 
     // ==================== STEAM CALLBACKS ====================
@@ -412,9 +661,17 @@ public class SteamLobbyManager : MonoBehaviour
 
     void OnDestroy()
     {
-        if (InLobby)
+        // Only leave lobby if Steam is still initialized
+        if (InLobby && SteamManager.Initialized)
         {
-            LeaveLobby();
+            try
+            {
+                LeaveLobby();
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogWarning($"[SteamLobby] Could not leave lobby on destroy: {e.Message}");
+            }
         }
     }
 }

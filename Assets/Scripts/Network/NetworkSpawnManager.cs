@@ -7,6 +7,11 @@ using System.Collections.Generic;
 /// Server-only spawn manager for networked game.
 /// Handles NPC spawning with NetworkObject sync.
 /// NPCs are spawned on server and automatically replicated to clients.
+///
+/// SPAWN POINT SYSTEM:
+/// - Each NPC spawn point holds exactly 1 NPC
+/// - Players take a random spawn point and replace the NPC
+/// - Late joiners despawn an existing NPC and take their place
 /// </summary>
 public class NetworkSpawnManager : MonoBehaviour
 {
@@ -16,12 +21,48 @@ public class NetworkSpawnManager : MonoBehaviour
     public GameObject npcPrefab;
 
     [Header("Settings")]
-    public int npcsPerZone = 5;
     public int randomSeed = 12345; // Fixed seed for deterministic spawning
 
     [Header("Debug")]
     [SerializeField] private bool isInitialized = false;
     [SerializeField] private int totalNPCsSpawned = 0;
+
+    // ==================== SPAWN POINT TRACKING ====================
+
+    /// <summary>
+    /// Tracks what occupies each spawn point
+    /// </summary>
+    public enum SpawnPointOccupant
+    {
+        Empty,
+        NPC,
+        Player
+    }
+
+    /// <summary>
+    /// Info about a spawn point and its current occupant
+    /// </summary>
+    [System.Serializable]
+    public class SpawnPointInfo
+    {
+        public Transform spawnPoint;
+        public SpawnPointOccupant occupant = SpawnPointOccupant.Empty;
+        public NetworkObject occupantNetObj; // The NPC NetworkObject at this point
+        public ulong playerClientId; // If occupied by player, their client ID
+        public string zoneName;
+
+        public SpawnPointInfo(Transform point, string zone)
+        {
+            spawnPoint = point;
+            zoneName = zone;
+            occupant = SpawnPointOccupant.Empty;
+            occupantNetObj = null;
+            playerClientId = 0;
+        }
+    }
+
+    [Header("Spawn Point Tracking")]
+    [SerializeField] private List<SpawnPointInfo> allSpawnPoints = new List<SpawnPointInfo>();
 
     // Track spawned NPCs
     private List<NetworkObject> spawnedNPCs = new List<NetworkObject>();
@@ -138,71 +179,120 @@ public class NetworkSpawnManager : MonoBehaviour
         }
     }
 
+    // ==================== SPAWN POINT COLLECTION ====================
+
     /// <summary>
-    /// Spawn NPCs in all zones using deterministic positions
+    /// Collect all NPC spawn points from all zones
     /// </summary>
-    void SpawnAllNPCs()
+    void CollectAllSpawnPoints()
     {
-        // Use fixed seed for deterministic spawning (same positions every game)
-        Random.InitState(randomSeed);
+        allSpawnPoints.Clear();
+
+        if (MapManager.Instance == null || MapManager.Instance.ZoneCount == 0)
+        {
+            Debug.LogWarning("[NetworkSpawnManager] No zones found for spawn point collection");
+            return;
+        }
 
         foreach (var zone in MapManager.Instance.AllZones)
         {
-            if (zone == null) continue;
+            if (zone == null || zone.npcSpawnPoints == null) continue;
 
-            SpawnNPCsInZone(zone);
+            foreach (var spawnPoint in zone.npcSpawnPoints)
+            {
+                if (spawnPoint != null)
+                {
+                    allSpawnPoints.Add(new SpawnPointInfo(spawnPoint, zone.zoneName));
+                }
+            }
+        }
+
+        Debug.Log($"[NetworkSpawnManager] Collected {allSpawnPoints.Count} spawn points from {MapManager.Instance.ZoneCount} zones");
+    }
+
+    /// <summary>
+    /// Get list of spawn points with NPCs (for late join replacement)
+    /// </summary>
+    public List<SpawnPointInfo> GetNPCOccupiedSpawnPoints()
+    {
+        List<SpawnPointInfo> npcPoints = new List<SpawnPointInfo>();
+        foreach (var info in allSpawnPoints)
+        {
+            if (info.occupant == SpawnPointOccupant.NPC && info.occupantNetObj != null)
+            {
+                npcPoints.Add(info);
+            }
+        }
+        return npcPoints;
+    }
+
+    /// <summary>
+    /// Get list of empty spawn points
+    /// </summary>
+    public List<SpawnPointInfo> GetEmptySpawnPoints()
+    {
+        List<SpawnPointInfo> emptyPoints = new List<SpawnPointInfo>();
+        foreach (var info in allSpawnPoints)
+        {
+            if (info.occupant == SpawnPointOccupant.Empty)
+            {
+                emptyPoints.Add(info);
+            }
+        }
+        return emptyPoints;
+    }
+
+    /// <summary>
+    /// Spawn NPCs at all spawn points (1 NPC per spawn point)
+    /// </summary>
+    void SpawnAllNPCs()
+    {
+        // First collect all spawn points
+        CollectAllSpawnPoints();
+
+        if (allSpawnPoints.Count == 0)
+        {
+            Debug.LogWarning("[NetworkSpawnManager] No spawn points found! Add npcSpawnPoints to your MapZones.");
+            return;
+        }
+
+        // Use fixed seed for deterministic spawning
+        Random.InitState(randomSeed);
+
+        // Spawn 1 NPC at each spawn point
+        for (int i = 0; i < allSpawnPoints.Count; i++)
+        {
+            var spawnInfo = allSpawnPoints[i];
+            if (spawnInfo.spawnPoint == null) continue;
+
+            Vector3 position = new Vector3(
+                spawnInfo.spawnPoint.position.x,
+                0f,
+                spawnInfo.spawnPoint.position.z
+            );
+            string npcName = $"NPC_{spawnInfo.zoneName}_{i + 1}";
+
+            NetworkObject netObj = SpawnSingleNPC(position, npcName);
+
+            if (netObj != null)
+            {
+                // Track this spawn point as occupied by NPC
+                spawnInfo.occupant = SpawnPointOccupant.NPC;
+                spawnInfo.occupantNetObj = netObj;
+            }
         }
 
         // Reset random state
         Random.InitState((int)System.DateTime.Now.Ticks);
 
-        Debug.Log($"[NetworkSpawnManager] Total NPCs spawned: {totalNPCsSpawned}");
-    }
-
-    /// <summary>
-    /// Spawn NPCs in a specific zone
-    /// </summary>
-    void SpawnNPCsInZone(MapZone zone)
-    {
-        Debug.Log($"[NetworkSpawnManager] Spawning {npcsPerZone} NPCs in zone '{zone.zoneName}'");
-
-        for (int i = 0; i < npcsPerZone; i++)
-        {
-            Vector3 position = GetSpawnPositionInZone(zone, i);
-            string npcName = $"NPC_{zone.zoneName}_{i + 1}";
-
-            SpawnSingleNPC(position, npcName);
-        }
-    }
-
-    /// <summary>
-    /// Get a spawn position in a zone (deterministic based on index)
-    /// </summary>
-    Vector3 GetSpawnPositionInZone(MapZone zone, int index)
-    {
-        // First try to use defined spawn points
-        if (zone.npcSpawnPoints != null && index < zone.npcSpawnPoints.Length)
-        {
-            Transform point = zone.npcSpawnPoints[index];
-            if (point != null)
-            {
-                // Use spawn point position at ground level (Y=0)
-                return new Vector3(point.position.x, 0f, point.position.z);
-            }
-        }
-
-        // Fallback: random position within zone bounds at ground level (Y=0)
-        Bounds bounds = zone.Bounds;
-        float x = Random.Range(bounds.min.x + 2f, bounds.max.x - 2f);
-        float z = Random.Range(bounds.min.z + 2f, bounds.max.z - 2f);
-
-        return new Vector3(x, 0f, z);
+        Debug.Log($"[NetworkSpawnManager] Total NPCs spawned: {totalNPCsSpawned} (1 per spawn point)");
     }
 
     /// <summary>
     /// Spawn a single NPC and register it on the network
+    /// Returns the NetworkObject for tracking
     /// </summary>
-    void SpawnSingleNPC(Vector3 position, string npcName)
+    NetworkObject SpawnSingleNPC(Vector3 position, string npcName)
     {
         // Instantiate the prefab
         GameObject npcObj = Instantiate(npcPrefab, position, Quaternion.identity);
@@ -230,6 +320,7 @@ public class NetworkSpawnManager : MonoBehaviour
         {
             Debug.LogError($"[NetworkSpawnManager] NPC prefab missing NetworkObject!");
             Destroy(npcObj);
+            return null;
         }
 
         // Setup NPC behavior if exists
@@ -244,6 +335,134 @@ public class NetworkSpawnManager : MonoBehaviour
                 field.SetValue(npcBehavior, npcName);
             }
         }
+
+        return netObj;
+    }
+
+    // ==================== PLAYER SPAWNING ====================
+
+    /// <summary>
+    /// Reserve a spawn point for a player. If NPCs already spawned, despawns the NPC at that point.
+    /// Returns the spawn point info, or null if no points available.
+    /// </summary>
+    public SpawnPointInfo ReserveSpawnPointForPlayer(ulong clientId)
+    {
+        // If spawn points not collected yet, do it now
+        if (allSpawnPoints.Count == 0)
+        {
+            CollectAllSpawnPoints();
+        }
+
+        // Ensure random is truly random (not using deterministic seed)
+        Random.InitState((int)System.DateTime.Now.Ticks + System.Environment.TickCount + (int)clientId);
+
+        // First try to find an empty spawn point
+        var emptyPoints = GetEmptySpawnPoints();
+        if (emptyPoints.Count > 0)
+        {
+            // Shuffle the list for extra randomness
+            ShuffleList(emptyPoints);
+            var chosen = emptyPoints[0];
+            chosen.occupant = SpawnPointOccupant.Player;
+            chosen.playerClientId = clientId;
+            Debug.Log($"[NetworkSpawnManager] Reserved empty spawn point for client {clientId} at {chosen.spawnPoint.position} (zone: {chosen.zoneName})");
+            return chosen;
+        }
+
+        // No empty points - take over a NPC spawn point
+        var npcPoints = GetNPCOccupiedSpawnPoints();
+        if (npcPoints.Count > 0)
+        {
+            // Shuffle the list for extra randomness
+            ShuffleList(npcPoints);
+            var chosen = npcPoints[0];
+
+            // Despawn the NPC at this point
+            if (chosen.occupantNetObj != null && chosen.occupantNetObj.IsSpawned)
+            {
+                Debug.Log($"[NetworkSpawnManager] Despawning NPC to make room for client {clientId}");
+                chosen.occupantNetObj.Despawn();
+                spawnedNPCs.Remove(chosen.occupantNetObj);
+                totalNPCsSpawned--;
+            }
+
+            chosen.occupant = SpawnPointOccupant.Player;
+            chosen.occupantNetObj = null;
+            chosen.playerClientId = clientId;
+            Debug.Log($"[NetworkSpawnManager] Reserved NPC spawn point for client {clientId} at {chosen.spawnPoint.position} (zone: {chosen.zoneName})");
+            return chosen;
+        }
+
+        Debug.LogWarning($"[NetworkSpawnManager] No spawn points available for client {clientId}!");
+        return null;
+    }
+
+    /// <summary>
+    /// Fisher-Yates shuffle for lists
+    /// </summary>
+    private void ShuffleList<T>(List<T> list)
+    {
+        for (int i = list.Count - 1; i > 0; i--)
+        {
+            int j = Random.Range(0, i + 1);
+            T temp = list[i];
+            list[i] = list[j];
+            list[j] = temp;
+        }
+    }
+
+    /// <summary>
+    /// Get spawn position for a player. Reserves a spawn point and returns position.
+    /// </summary>
+    public Vector3 GetPlayerSpawnPosition(ulong clientId)
+    {
+        var spawnInfo = ReserveSpawnPointForPlayer(clientId);
+        if (spawnInfo != null && spawnInfo.spawnPoint != null)
+        {
+            return new Vector3(
+                spawnInfo.spawnPoint.position.x,
+                0f,
+                spawnInfo.spawnPoint.position.z
+            );
+        }
+
+        // Fallback to center
+        Debug.LogWarning($"[NetworkSpawnManager] No spawn point available for client {clientId}, using fallback");
+        return Vector3.zero;
+    }
+
+    /// <summary>
+    /// Handle late join - find an NPC to replace with player.
+    /// Returns the spawn point where player should spawn.
+    /// </summary>
+    public SpawnPointInfo HandleLateJoin(ulong clientId)
+    {
+        var npcPoints = GetNPCOccupiedSpawnPoints();
+
+        if (npcPoints.Count == 0)
+        {
+            Debug.LogWarning($"[NetworkSpawnManager] Late join failed for client {clientId}: no NPCs to replace!");
+            return null;
+        }
+
+        // Pick a random NPC to replace
+        int randomIndex = Random.Range(0, npcPoints.Count);
+        var chosen = npcPoints[randomIndex];
+
+        // Despawn the NPC
+        if (chosen.occupantNetObj != null && chosen.occupantNetObj.IsSpawned)
+        {
+            Debug.Log($"[NetworkSpawnManager] Late join: despawning NPC for client {clientId}");
+            chosen.occupantNetObj.Despawn();
+            spawnedNPCs.Remove(chosen.occupantNetObj);
+            totalNPCsSpawned--;
+        }
+
+        chosen.occupant = SpawnPointOccupant.Player;
+        chosen.occupantNetObj = null;
+        chosen.playerClientId = clientId;
+
+        return chosen;
     }
 
     /// <summary>
@@ -252,7 +471,8 @@ public class NetworkSpawnManager : MonoBehaviour
     public void OnClientConnected(ulong clientId)
     {
         Debug.Log($"[NetworkSpawnManager] Client {clientId} connected - they will receive {spawnedNPCs.Count} NPCs automatically via Netcode");
-        // No action needed - Netcode automatically syncs NetworkObjects to new clients
+        // Netcode automatically syncs NetworkObjects to new clients
+        // Player spawn is handled separately via NetworkGameManager
     }
 
     /// <summary>
@@ -283,4 +503,6 @@ public class NetworkSpawnManager : MonoBehaviour
     // Public getters
     public bool IsInitialized => isInitialized;
     public int NPCCount => totalNPCsSpawned;
+    public int SpawnPointCount => allSpawnPoints.Count;
+    public List<SpawnPointInfo> AllSpawnPoints => allSpawnPoints;
 }

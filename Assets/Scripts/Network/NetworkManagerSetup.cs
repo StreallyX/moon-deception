@@ -1,14 +1,22 @@
 using UnityEngine;
 using Unity.Netcode;
+#if !DISABLESTEAMWORKS
+using Steamworks;
+#endif
 
 /// <summary>
 /// Sets up the NetworkManager with proper configuration.
 /// Attach to a GameObject with NetworkManager component.
+/// Supports both Steam Relay (internet) and Unity Transport (LAN).
 /// </summary>
 public class NetworkManagerSetup : MonoBehaviour
 {
     [Header("Network Settings")]
     public int maxPlayers = 6; // 1 Astronaut + 5 Aliens
+
+    [Header("Transport Selection")]
+    [Tooltip("Prefer Steam transport when Steam is available (recommended for internet play)")]
+    public bool preferSteamTransport = true;
 
     void Awake()
     {
@@ -19,19 +27,43 @@ public class NetworkManagerSetup : MonoBehaviour
             networkManager = gameObject.AddComponent<NetworkManager>();
         }
 
-        // Configure transport (Unity Transport)
-        var transport = GetComponent<Unity.Netcode.Transports.UTP.UnityTransport>();
-        if (transport == null)
+        // Configure Unity Transport (fallback for LAN)
+        var unityTransport = GetComponent<Unity.Netcode.Transports.UTP.UnityTransport>();
+        if (unityTransport == null)
         {
-            transport = gameObject.AddComponent<Unity.Netcode.Transports.UTP.UnityTransport>();
-            networkManager.NetworkConfig.NetworkTransport = transport;
+            unityTransport = gameObject.AddComponent<Unity.Netcode.Transports.UTP.UnityTransport>();
         }
 
-        // Set connection data
-        transport.ConnectionData.Address = "127.0.0.1";
-        transport.ConnectionData.Port = 7777;
+        // Set Unity Transport connection data (for LAN fallback)
+        unityTransport.ConnectionData.Address = "127.0.0.1";
+        unityTransport.ConnectionData.Port = 7777;
 
-        Debug.Log("[NetworkManagerSetup] NetworkManager configured");
+        // Check if Steam is available and add Steam transport
+        bool useSteam = false;
+
+#if !DISABLESTEAMWORKS
+        if (preferSteamTransport && SteamManager.Initialized)
+        {
+            var steamTransport = GetComponent<SteamNetworkTransport>();
+            if (steamTransport == null)
+            {
+                steamTransport = gameObject.AddComponent<SteamNetworkTransport>();
+            }
+
+            // Use Steam transport as primary
+            networkManager.NetworkConfig.NetworkTransport = steamTransport;
+            useSteam = true;
+            Debug.Log("[NetworkManagerSetup] Steam transport configured (internet play via Steam Relay)");
+        }
+        else
+#endif
+        {
+            // Use Unity Transport
+            networkManager.NetworkConfig.NetworkTransport = unityTransport;
+            Debug.Log("[NetworkManagerSetup] Unity transport configured (LAN play)");
+        }
+
+        Debug.Log($"[NetworkManagerSetup] NetworkManager configured. Steam: {useSteam}");
     }
 
     void Start()

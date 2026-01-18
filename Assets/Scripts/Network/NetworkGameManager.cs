@@ -302,8 +302,8 @@ public class NetworkGameManager : MonoBehaviour
             return;
         }
 
-        // Get spawn point
-        Vector3 spawnPos = GetSpawnPosition(role);
+        // Get spawn point using NetworkSpawnManager (this despawns any NPC at that location)
+        Vector3 spawnPos = GetSpawnPositionAndDespawnNPC(clientId);
         Quaternion spawnRot = Quaternion.identity;
 
         // Spawn networked player
@@ -346,36 +346,33 @@ public class NetworkGameManager : MonoBehaviour
         }
     }
 
-    Vector3 GetSpawnPosition(PlayerRole role)
+    /// <summary>
+    /// Get a random spawn position for a player and despawn any NPC at that location.
+    /// Uses NetworkSpawnManager to properly track spawn points.
+    /// </summary>
+    Vector3 GetSpawnPositionAndDespawnNPC(ulong clientId)
     {
-        // Try to use MapManager spawn points
-        if (MapManager.Instance != null)
+        // Use NetworkSpawnManager if available (handles NPC despawning)
+        if (NetworkSpawnManager.Instance != null)
         {
-            var zones = MapManager.Instance.AllZones;
-            if (zones != null && zones.Count > 0)
+            Vector3 pos = NetworkSpawnManager.Instance.GetPlayerSpawnPosition(clientId);
+            Debug.Log($"[NetworkGame] Got spawn position from NetworkSpawnManager for client {clientId}: {pos}");
+            return pos;
+        }
+
+        // Fallback: use SpawnManager (single player style)
+        if (SpawnManager.Instance != null)
+        {
+            var spawnInfo = SpawnManager.Instance.ReserveSpawnPointForPlayer();
+            if (spawnInfo != null && spawnInfo.spawnPoint != null)
             {
-                // Astronaut spawns in Command, Aliens in random other zones
-                foreach (var zone in zones)
-                {
-                    if (role == PlayerRole.Astronaut && zone.zoneType == MapZone.ZoneType.Command)
-                    {
-                        if (zone.npcSpawnPoints != null && zone.npcSpawnPoints.Length > 0)
-                        {
-                            return zone.npcSpawnPoints[Random.Range(0, zone.npcSpawnPoints.Length)].position;
-                        }
-                    }
-                    else if (role == PlayerRole.Alien && zone.zoneType != MapZone.ZoneType.Command)
-                    {
-                        if (zone.npcSpawnPoints != null && zone.npcSpawnPoints.Length > 0)
-                        {
-                            return zone.npcSpawnPoints[Random.Range(0, zone.npcSpawnPoints.Length)].position;
-                        }
-                    }
-                }
+                Debug.Log($"[NetworkGame] Got spawn position from SpawnManager: {spawnInfo.spawnPoint.position}");
+                return spawnInfo.spawnPoint.position;
             }
         }
 
-        // Fallback: random position near origin
+        // Last fallback: random position near origin
+        Debug.LogWarning("[NetworkGame] No spawn manager available, using fallback position");
         return new Vector3(Random.Range(-5f, 5f), 1f, Random.Range(-5f, 5f));
     }
 

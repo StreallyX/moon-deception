@@ -18,9 +18,6 @@ public class SimpleNetworkTest : MonoBehaviour
     [Header("Optional NPC Prefab")]
     public GameObject npcPrefab;
 
-    [Header("Settings")]
-    public int npcCount = 10;
-
     private bool networkStarted = false;
     private bool prefabsRegistered = false;
 
@@ -237,7 +234,7 @@ public class SimpleNetworkTest : MonoBehaviour
             GameObject spawnMgrObj = new GameObject("NetworkSpawnManager");
             networkSpawnManager = spawnMgrObj.AddComponent<NetworkSpawnManager>();
             networkSpawnManager.npcPrefab = npcPrefab;
-            networkSpawnManager.npcsPerZone = npcCount;
+            // Note: NPC count is now determined by spawn points in MapZones (1 NPC per spawn point)
 
             // DON'T spawn as NetworkObject - it doesn't need to be synced
             // The manager just runs on the server and spawns players
