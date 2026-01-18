@@ -15,6 +15,7 @@ GameObject:
   - component: {fileID: 6515252690324585484}
   - component: {fileID: 6565425887587084715}
   - component: {fileID: 5132595016303796164}
+  - component: {fileID: 2420372622940305037}
   m_Layer: 8
   m_Name: NetworkedNPC
   m_TagString: NPC
@@ -214,6 +215,28 @@ MonoBehaviour:
   SwitchTransformSpaceWhenParented: 0
   Interpolate: 1
   SlerpPosition: 0
+--- !u!95 &2420372622940305037
+Animator:
+  serializedVersion: 7
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1714744776912737565}
+  m_Enabled: 1
+  m_Avatar: {fileID: 9000000, guid: 4471901caf6a38d42955f831d0834702, type: 3}
+  m_Controller: {fileID: 9100000, guid: f93ccf72ba39adb4592ed23c8c45fff1, type: 2}
+  m_CullingMode: 0
+  m_UpdateMode: 0
+  m_ApplyRootMotion: 0
+  m_LinearVelocityBlending: 0
+  m_StabilizeFeet: 0
+  m_AnimatePhysics: 0
+  m_WarningMessage: 
+  m_HasTransformHierarchy: 1
+  m_AllowConstantClipSamplingOptimization: 1
+  m_KeepAnimatorStateOnDisable: 0
+  m_WriteDefaultValuesOnDisable: 0
 --- !u!1001 &3391784529075949427
 PrefabInstance:
   m_ObjectHideFlags: 0

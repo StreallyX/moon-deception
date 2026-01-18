@@ -80,6 +80,9 @@ public class NPCBehavior : NetworkBehaviour, IDamageable
     private Animator animator;
     private CharacterController characterController;
 
+    // Animation speed control
+    private float baseAnimationSpeed = 1f;
+
     public NPCState CurrentState => currentState;
     public bool IsDead => currentState == NPCState.Dead;
     public bool IsAlien => isAlien;
@@ -473,8 +476,11 @@ public class NPCBehavior : NetworkBehaviour, IDamageable
             float currentSpeed = isRunning ? runSpeed : walkSpeed;
             float moveDistance = currentSpeed * Time.deltaTime;
 
+            // Update animation with current speed
+            UpdateAnimation(currentSpeed);
+
             // Check for obstacles before moving
-            
+
 
             if (characterController != null)
             {
@@ -525,6 +531,16 @@ public class NPCBehavior : NetworkBehaviour, IDamageable
                 runDir = new Vector3(Random.Range(-1f, 1f), 0f, Random.Range(-1f, 1f)).normalized;
             }
 
+            // Rotate to face movement direction
+            if (runDir.sqrMagnitude > 0.01f)
+            {
+                Quaternion targetRotation = Quaternion.LookRotation(runDir);
+                transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, 10f * Time.deltaTime);
+            }
+
+            // Update animation with run speed (panic = running)
+            UpdateAnimation(runSpeed);
+
             // Check for obstacles before moving (prevents passing through walls)
             float moveDistance = runSpeed * Time.deltaTime;
 
@@ -549,10 +565,36 @@ public class NPCBehavior : NetworkBehaviour, IDamageable
         currentState = newState;
         stateTimer = 0f;
 
-        if (animator != null)
+        UpdateAnimation(0f);
+    }
+
+    /// <summary>
+    /// Update animation based on current state and movement speed
+    /// </summary>
+    private void UpdateAnimation(float currentSpeed)
+    {
+        if (animator == null) return;
+
+        // Set animation state
+        animator.SetInteger("State", (int)currentState);
+
+        // Set speed parameter for blend trees (if used)
+        animator.SetFloat("Speed", currentSpeed);
+
+        // Control animation speed: walk = 1x, run = 1.5x
+        if (currentState == NPCState.Walking || currentState == NPCState.Panicking)
         {
-            animator.SetInteger("State", (int)newState);
+            float speedRatio = currentSpeed / walkSpeed;
+            animator.speed = Mathf.Clamp(speedRatio, 0.5f, 2f); // Clamp between 0.5x and 2x
         }
+        else
+        {
+            animator.speed = baseAnimationSpeed;
+        }
+
+        // Trigger walk/run animation
+        bool isMoving = currentSpeed > 0.1f;
+        animator.SetBool("IsMoving", isMoving);
     }
 
     public void Panic()

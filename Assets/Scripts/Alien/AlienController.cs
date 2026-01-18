@@ -37,10 +37,11 @@ public class AlienController : MonoBehaviour
     private float yaw = 0f;
     private float pitch = 20f;
     private Vector3 velocity;
-    
+    private Animator animator;
+
     public static AlienController ActiveAlien { get; private set; }
     public static bool IsAlienControlled => ActiveAlien != null && ActiveAlien.enabled;
-    
+
     private bool isControlled = false;
     
     void Awake()
@@ -82,6 +83,9 @@ public class AlienController : MonoBehaviour
         {
             hungerSystem = GetComponent<HungerSystem>();
         }
+
+        // Get animator for walk/run animations
+        animator = GetComponentInChildren<Animator>();
 
         yaw = transform.eulerAngles.y;
         velocity = Vector3.zero;
@@ -368,11 +372,14 @@ public class AlienController : MonoBehaviour
 
         // 7. ALWAYS call Move() - even if move is zero!
         characterController.Move(move * moveSpeed * Time.deltaTime);
-        
+
         // 7. ALWAYS apply vertical velocity
         characterController.Move(new Vector3(0, velocity.y, 0) * Time.deltaTime);
-        
-        // 8. Update camera position
+
+        // 8. Update animation based on movement
+        UpdateAnimation(move.magnitude > 0.1f ? moveSpeed : 0f);
+
+        // 9. Update camera position
         UpdateCameraPosition();
         
         // Debug logging
@@ -419,6 +426,24 @@ public class AlienController : MonoBehaviour
         // Smooth camera follow
         cameraTransform.position = Vector3.Lerp(cameraTransform.position, targetPosition, 10f * Time.deltaTime);
         cameraTransform.LookAt(transform.position + Vector3.up * 1.5f);
+    }
+
+    /// <summary>
+    /// Update animation based on movement speed
+    /// </summary>
+    private void UpdateAnimation(float currentSpeed)
+    {
+        if (animator == null) return;
+
+        // Set speed parameter for blend trees
+        animator.SetFloat("Speed", currentSpeed);
+
+        // Control animation speed: walk = 1x, run = 1.5x
+        float speedRatio = currentSpeed / walkSpeed;
+        animator.speed = Mathf.Clamp(speedRatio, 0.5f, 2f);
+
+        // Set IsMoving for animation transitions
+        animator.SetBool("IsMoving", currentSpeed > 0.1f);
     }
     
     public void EnableControl()

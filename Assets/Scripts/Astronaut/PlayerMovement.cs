@@ -35,6 +35,7 @@ public class PlayerMovement : MonoBehaviour
     public static bool IsPlayerControlled => ActivePlayer != null && ActivePlayer.enabled;
 
     private bool isControlled = false;
+    private Renderer[] modelRenderers; // Pour cacher le modèle en FPS
 
     void Awake()
     {
@@ -63,6 +64,9 @@ public class PlayerMovement : MonoBehaviour
 
         // Force Unity to resolve collision on first frame
         controller.Move(Vector3.down * 0.5f);
+
+        // Cache all renderers for hiding in FPS mode
+        modelRenderers = GetComponentsInChildren<Renderer>(true);
 
         Debug.Log($"[PlayerMovement] Initialized. Camera: {cameraTransform?.name}");
     }
@@ -117,7 +121,30 @@ public class PlayerMovement : MonoBehaviour
             GameUIManager.Instance.SetPlayerType(PlayerType.Astronaut);
         }
 
+        // Hide own model for FPS view (player shouldn't see their own body)
+        SetModelVisible(false);
+
         Debug.Log("[PlayerMovement] Enabled - Player is now controlled");
+    }
+
+    /// <summary>
+    /// Show/hide the player's 3D model (for FPS view)
+    /// </summary>
+    private void SetModelVisible(bool visible)
+    {
+        if (modelRenderers == null)
+        {
+            modelRenderers = GetComponentsInChildren<Renderer>(true);
+        }
+
+        foreach (var renderer in modelRenderers)
+        {
+            if (renderer != null)
+            {
+                renderer.enabled = visible;
+            }
+        }
+        Debug.Log($"[PlayerMovement] Model visibility set to: {visible}");
     }
 
     void FindCamera()
@@ -156,6 +183,9 @@ public class PlayerMovement : MonoBehaviour
         {
             playerCamera.gameObject.SetActive(false);
         }
+
+        // Show model again (for other players to see in multiplayer)
+        SetModelVisible(true);
 
         if (GameUIManager.Instance != null)
         {
