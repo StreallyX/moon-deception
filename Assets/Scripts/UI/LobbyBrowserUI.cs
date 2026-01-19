@@ -2,6 +2,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
 using System.Collections.Generic;
+using System.Linq;
 using Steamworks;
 
 /// <summary>
@@ -17,12 +18,16 @@ public class LobbyBrowserUI : MonoBehaviour
     public GameObject lobbyItemPrefab;
     public TextMeshProUGUI statusText;
 
+    [Header("Search")]
+    public TMP_InputField searchInputField;
+
     [Header("Buttons")]
     public Button createLobbyButton;
     public Button refreshButton;
     public Button backButton;
 
     private List<GameObject> lobbyItems = new List<GameObject>();
+    private List<SteamLobbyManager.LobbyInfo> allLobbies = new List<SteamLobbyManager.LobbyInfo>();
 
     void OnEnable()
     {
@@ -36,8 +41,14 @@ public class LobbyBrowserUI : MonoBehaviour
 
             // Request lobby list
             SteamLobbyManager.Instance.RequestLobbyList();
-            SetStatus("Searching for lobbies...");
+            SetStatus("Recherche de lobbies...");
         }
+
+        // Clear search field
+        if (searchInputField != null)
+            searchInputField.text = "";
+
+        allLobbies.Clear();
     }
 
     void OnDisable()
@@ -63,8 +74,162 @@ public class LobbyBrowserUI : MonoBehaviour
         if (backButton != null)
             backButton.onClick.AddListener(OnBackClicked);
 
+        // Setup search field
+        EnsureSearchField();
+
         // Setup lobby list content layout
         SetupLobbyListLayout();
+    }
+
+    void EnsureSearchField()
+    {
+        if (searchInputField != null)
+        {
+            searchInputField.onValueChanged.AddListener(OnSearchTextChanged);
+            return;
+        }
+
+        // Create search field if not assigned
+        if (lobbyListContent == null) return;
+
+        Transform parent = lobbyListContent.parent;
+        if (parent == null) parent = transform;
+
+        // Create search container
+        GameObject searchContainer = new GameObject("SearchContainer");
+        searchContainer.transform.SetParent(parent, false);
+        searchContainer.transform.SetAsFirstSibling();
+
+        RectTransform containerRect = searchContainer.AddComponent<RectTransform>();
+        containerRect.anchorMin = new Vector2(0.5f, 1);
+        containerRect.anchorMax = new Vector2(0.5f, 1);
+        containerRect.pivot = new Vector2(0.5f, 1);
+        containerRect.anchoredPosition = new Vector2(0, -10);
+        containerRect.sizeDelta = new Vector2(420, 50);
+
+        // Background
+        Image bgImage = searchContainer.AddComponent<Image>();
+        bgImage.color = new Color(0.15f, 0.15f, 0.2f, 0.9f);
+
+        // Create input field
+        GameObject inputObj = new GameObject("SearchInputField");
+        inputObj.transform.SetParent(searchContainer.transform, false);
+
+        RectTransform inputRect = inputObj.AddComponent<RectTransform>();
+        inputRect.anchorMin = Vector2.zero;
+        inputRect.anchorMax = Vector2.one;
+        inputRect.sizeDelta = new Vector2(-20, -10);
+        inputRect.anchoredPosition = Vector2.zero;
+
+        // Text Area
+        GameObject textArea = new GameObject("Text Area");
+        textArea.transform.SetParent(inputObj.transform, false);
+
+        RectTransform textAreaRect = textArea.AddComponent<RectTransform>();
+        textAreaRect.anchorMin = Vector2.zero;
+        textAreaRect.anchorMax = Vector2.one;
+        textAreaRect.sizeDelta = new Vector2(-20, 0);
+        textAreaRect.anchoredPosition = new Vector2(10, 0);
+
+        RectMask2D mask = textArea.AddComponent<RectMask2D>();
+
+        // Placeholder
+        GameObject placeholder = new GameObject("Placeholder");
+        placeholder.transform.SetParent(textArea.transform, false);
+
+        RectTransform placeholderRect = placeholder.AddComponent<RectTransform>();
+        placeholderRect.anchorMin = Vector2.zero;
+        placeholderRect.anchorMax = Vector2.one;
+        placeholderRect.sizeDelta = Vector2.zero;
+        placeholderRect.anchoredPosition = Vector2.zero;
+
+        TextMeshProUGUI placeholderText = placeholder.AddComponent<TextMeshProUGUI>();
+        placeholderText.text = "Rechercher un lobby...";
+        placeholderText.fontSize = 18;
+        placeholderText.color = new Color(0.5f, 0.5f, 0.5f);
+        placeholderText.alignment = TextAlignmentOptions.Left;
+        placeholderText.verticalAlignment = VerticalAlignmentOptions.Middle;
+
+        // Text component
+        GameObject textObj = new GameObject("Text");
+        textObj.transform.SetParent(textArea.transform, false);
+
+        RectTransform textRect = textObj.AddComponent<RectTransform>();
+        textRect.anchorMin = Vector2.zero;
+        textRect.anchorMax = Vector2.one;
+        textRect.sizeDelta = Vector2.zero;
+        textRect.anchoredPosition = Vector2.zero;
+
+        TextMeshProUGUI inputText = textObj.AddComponent<TextMeshProUGUI>();
+        inputText.fontSize = 18;
+        inputText.color = Color.white;
+        inputText.alignment = TextAlignmentOptions.Left;
+        inputText.verticalAlignment = VerticalAlignmentOptions.Middle;
+
+        // Input Field component
+        searchInputField = inputObj.AddComponent<TMP_InputField>();
+        searchInputField.textViewport = textAreaRect;
+        searchInputField.textComponent = inputText;
+        searchInputField.placeholder = placeholderText;
+        searchInputField.fontAsset = inputText.font;
+        searchInputField.pointSize = 18;
+        searchInputField.caretColor = Color.white;
+        searchInputField.selectionColor = new Color(0.2f, 0.6f, 0.9f, 0.5f);
+
+        searchInputField.onValueChanged.AddListener(OnSearchTextChanged);
+
+        // Adjust lobby list position
+        if (lobbyListContent != null)
+        {
+            RectTransform listRect = lobbyListContent.GetComponent<RectTransform>();
+            if (listRect != null)
+            {
+                listRect.anchoredPosition = new Vector2(listRect.anchoredPosition.x, listRect.anchoredPosition.y - 60);
+            }
+        }
+    }
+
+    void OnSearchTextChanged(string searchText)
+    {
+        FilterAndDisplayLobbies(searchText);
+    }
+
+    void FilterAndDisplayLobbies(string searchText)
+    {
+        ClearLobbyList();
+
+        if (allLobbies.Count == 0)
+        {
+            SetStatus("Aucun lobby trouvé. Créez-en un!");
+            return;
+        }
+
+        List<SteamLobbyManager.LobbyInfo> filtered;
+
+        if (string.IsNullOrWhiteSpace(searchText))
+        {
+            filtered = allLobbies;
+        }
+        else
+        {
+            string search = searchText.ToLower().Trim();
+            filtered = allLobbies.Where(l =>
+                l.lobbyName.ToLower().Contains(search)
+            ).ToList();
+        }
+
+        if (filtered.Count == 0)
+        {
+            SetStatus($"Aucun lobby trouvé pour \"{searchText}\"");
+            return;
+        }
+
+        SetStatus($"{filtered.Count} lobby(s) trouvé(s)");
+
+        foreach (var lobby in filtered)
+        {
+            CreateLobbyItem(lobby);
+        }
     }
 
     void SetupLobbyListLayout()
@@ -115,7 +280,7 @@ public class LobbyBrowserUI : MonoBehaviour
         if (AudioManager.Instance != null)
             AudioManager.Instance.PlayUIClick();
 
-        SetStatus("Creating lobby...");
+        SetStatus("Création du lobby...");
 
         if (SteamLobbyManager.Instance != null)
         {
@@ -128,8 +293,13 @@ public class LobbyBrowserUI : MonoBehaviour
         if (AudioManager.Instance != null)
             AudioManager.Instance.PlayUIClick();
 
-        SetStatus("Refreshing...");
+        SetStatus("Actualisation...");
         ClearLobbyList();
+        allLobbies.Clear();
+
+        // Clear search field
+        if (searchInputField != null)
+            searchInputField.text = "";
 
         if (SteamLobbyManager.Instance != null)
         {
@@ -152,20 +322,12 @@ public class LobbyBrowserUI : MonoBehaviour
 
     void OnLobbyListReceived(List<SteamLobbyManager.LobbyInfo> lobbies)
     {
-        ClearLobbyList();
+        // Store all lobbies for filtering
+        allLobbies = new List<SteamLobbyManager.LobbyInfo>(lobbies);
 
-        if (lobbies.Count == 0)
-        {
-            SetStatus("No lobbies found. Create one!");
-            return;
-        }
-
-        SetStatus($"Found {lobbies.Count} lobby(s)");
-
-        foreach (var lobby in lobbies)
-        {
-            CreateLobbyItem(lobby);
-        }
+        // Apply current search filter
+        string currentSearch = searchInputField != null ? searchInputField.text : "";
+        FilterAndDisplayLobbies(currentSearch);
     }
 
     void OnLobbyCreated()
@@ -301,7 +463,7 @@ public class LobbyBrowserUI : MonoBehaviour
         if (AudioManager.Instance != null)
             AudioManager.Instance.PlayUIClick();
 
-        SetStatus("Joining lobby...");
+        SetStatus("Connexion au lobby...");
 
         if (SteamLobbyManager.Instance != null)
         {

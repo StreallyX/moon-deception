@@ -27,6 +27,9 @@ public class MainMenuUI : MonoBehaviour
     public TextMeshProUGUI steamStatusText;
     public TextMeshProUGUI playerNameText;
 
+    [Header("Settings")]
+    public Button settingsBackButton;
+
     [Header("Local Test Settings")]
     public string gameSceneName = "SampleScene";
 
@@ -48,11 +51,120 @@ public class MainMenuUI : MonoBehaviour
         if (quitButton != null)
             quitButton.onClick.AddListener(OnQuitClicked);
 
+        if (settingsBackButton != null)
+            settingsBackButton.onClick.AddListener(OnSettingsBackClicked);
+
+        // Create status texts if not assigned
+        EnsureStatusTexts();
+
         // Show main menu
         ShowMainMenu();
 
         // Update Steam status
         UpdateSteamStatus();
+    }
+
+    void EnsureStatusTexts()
+    {
+        if (mainMenuPanel == null) return;
+
+        // Create steam status text if missing
+        if (steamStatusText == null)
+        {
+            GameObject steamObj = new GameObject("SteamStatusText");
+            steamObj.transform.SetParent(mainMenuPanel.transform, false);
+
+            RectTransform rect = steamObj.AddComponent<RectTransform>();
+            rect.anchorMin = new Vector2(0, 1);
+            rect.anchorMax = new Vector2(0, 1);
+            rect.pivot = new Vector2(0, 1);
+            rect.anchoredPosition = new Vector2(20, -20);
+            rect.sizeDelta = new Vector2(300, 30);
+
+            steamStatusText = steamObj.AddComponent<TextMeshProUGUI>();
+            steamStatusText.fontSize = 18;
+            steamStatusText.color = new Color(0.7f, 0.7f, 0.7f);
+            steamStatusText.alignment = TextAlignmentOptions.Left;
+        }
+
+        // Create player name text if missing
+        if (playerNameText == null)
+        {
+            GameObject nameObj = new GameObject("PlayerNameText");
+            nameObj.transform.SetParent(mainMenuPanel.transform, false);
+
+            RectTransform rect = nameObj.AddComponent<RectTransform>();
+            rect.anchorMin = new Vector2(0, 1);
+            rect.anchorMax = new Vector2(0, 1);
+            rect.pivot = new Vector2(0, 1);
+            rect.anchoredPosition = new Vector2(20, -50);
+            rect.sizeDelta = new Vector2(400, 30);
+
+            playerNameText = nameObj.AddComponent<TextMeshProUGUI>();
+            playerNameText.fontSize = 20;
+            playerNameText.color = Color.white;
+            playerNameText.alignment = TextAlignmentOptions.Left;
+        }
+
+        // Create settings back button if missing
+        EnsureSettingsBackButton();
+    }
+
+    void EnsureSettingsBackButton()
+    {
+        if (settingsPanel == null) return;
+        if (settingsBackButton != null) return;
+
+        // Look for existing back button in settings panel
+        Button[] buttons = settingsPanel.GetComponentsInChildren<Button>(true);
+        foreach (var btn in buttons)
+        {
+            TextMeshProUGUI btnText = btn.GetComponentInChildren<TextMeshProUGUI>();
+            if (btnText != null && (btnText.text.ToLower().Contains("back") || btnText.text.ToLower().Contains("retour")))
+            {
+                settingsBackButton = btn;
+                settingsBackButton.onClick.AddListener(OnSettingsBackClicked);
+                return;
+            }
+        }
+
+        // Create back button if not found
+        GameObject btnObj = new GameObject("BackButton");
+        btnObj.transform.SetParent(settingsPanel.transform, false);
+
+        RectTransform rect = btnObj.AddComponent<RectTransform>();
+        rect.anchorMin = new Vector2(0.5f, 0);
+        rect.anchorMax = new Vector2(0.5f, 0);
+        rect.pivot = new Vector2(0.5f, 0);
+        rect.anchoredPosition = new Vector2(0, 50);
+        rect.sizeDelta = new Vector2(200, 50);
+
+        Image img = btnObj.AddComponent<Image>();
+        img.color = new Color(0.3f, 0.3f, 0.35f);
+
+        settingsBackButton = btnObj.AddComponent<Button>();
+        ColorBlock colors = settingsBackButton.colors;
+        colors.normalColor = new Color(0.3f, 0.3f, 0.35f);
+        colors.highlightedColor = new Color(0.4f, 0.4f, 0.5f);
+        colors.pressedColor = new Color(0.2f, 0.2f, 0.25f);
+        settingsBackButton.colors = colors;
+
+        // Button text
+        GameObject textObj = new GameObject("Text");
+        textObj.transform.SetParent(btnObj.transform, false);
+
+        RectTransform textRect = textObj.AddComponent<RectTransform>();
+        textRect.anchorMin = Vector2.zero;
+        textRect.anchorMax = Vector2.one;
+        textRect.sizeDelta = Vector2.zero;
+
+        TextMeshProUGUI text = textObj.AddComponent<TextMeshProUGUI>();
+        text.text = "RETOUR";
+        text.fontSize = 24;
+        text.color = Color.white;
+        text.alignment = TextAlignmentOptions.Center;
+
+        settingsBackButton.onClick.AddListener(OnSettingsBackClicked);
     }
 
     void EnsureAudioListener()
@@ -176,22 +288,58 @@ public class MainMenuUI : MonoBehaviour
 
     void UpdateSteamStatus()
     {
-        if (SteamManager.Initialized)
+        bool steamAvailable = false;
+        string playerName = "";
+
+        try
+        {
+            steamAvailable = SteamManager.Initialized;
+            if (steamAvailable)
+            {
+                playerName = SteamFriends.GetPersonaName();
+            }
+        }
+        catch (System.Exception)
+        {
+            steamAvailable = false;
+        }
+
+        if (steamAvailable)
         {
             if (steamStatusText != null)
-                steamStatusText.text = "Steam: Connected";
+            {
+                steamStatusText.text = "Steam: Connecté";
+                steamStatusText.color = new Color(0.5f, 0.9f, 0.5f); // Green
+            }
 
             if (playerNameText != null)
-                playerNameText.text = $"Welcome, {SteamFriends.GetPersonaName()}";
+            {
+                playerNameText.text = $"Bienvenue, {playerName}";
+                playerNameText.color = Color.white;
+            }
         }
         else
         {
             if (steamStatusText != null)
-                steamStatusText.text = "Steam: Not Connected";
+            {
+                steamStatusText.text = "Steam: Non connecté";
+                steamStatusText.color = new Color(0.9f, 0.5f, 0.5f); // Red
+            }
 
             if (playerNameText != null)
-                playerNameText.text = "Steam required to play online";
+            {
+                playerNameText.text = "Joueur local";
+                playerNameText.color = new Color(0.7f, 0.7f, 0.7f);
+            }
         }
+    }
+
+    void OnSettingsBackClicked()
+    {
+        if (AudioManager.Instance != null)
+            AudioManager.Instance.PlayUIClick();
+
+        ShowMainMenu();
     }
 
     // ==================== BUTTON HANDLERS ====================
