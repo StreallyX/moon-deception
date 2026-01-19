@@ -531,7 +531,17 @@ public class SpawnManager : MonoBehaviour
             if (chosen.occupantObject != null)
             {
                 Debug.Log($"[SpawnManager] Despawning NPC '{chosen.occupantObject.name}' to make room for player");
-                Destroy(chosen.occupantObject);
+
+                var netObj = chosen.occupantObject.GetComponent<NetworkObject>();
+                if (netObj != null)
+                {
+                    if (NetworkManager.Singleton != null && NetworkManager.Singleton.IsServer)
+                        netObj.Despawn(true);
+                }
+                else
+                {
+                    Destroy(chosen.occupantObject);
+                }
             }
 
             chosen.occupant = SpawnPointOccupant.Player;
@@ -590,7 +600,17 @@ public class SpawnManager : MonoBehaviour
         if (chosen.occupantObject != null)
         {
             Debug.Log($"[SpawnManager] Late join: despawning NPC '{chosen.occupantObject.name}'");
-            Destroy(chosen.occupantObject);
+            var netObj = chosen.occupantObject.GetComponent<NetworkObject>();
+            if (netObj != null)
+            {
+                if (NetworkManager.Singleton != null && NetworkManager.Singleton.IsServer)
+                    netObj.Despawn(true);
+            }
+            else
+            {
+                Destroy(chosen.occupantObject);
+            }
+
         }
 
         chosen.occupant = SpawnPointOccupant.Player;
@@ -1095,6 +1115,11 @@ public class SpawnManager : MonoBehaviour
     /// </summary>
     public void ClearNPCsNearPosition(Vector3 position, float radius = 3f)
     {
+        if (NetworkManager.Singleton != null && !NetworkManager.Singleton.IsServer)
+        {
+            return;
+        }
+
         NPCBehavior[] allNPCs = FindObjectsOfType<NPCBehavior>();
         int cleared = 0;
 
@@ -1121,11 +1146,7 @@ public class SpawnManager : MonoBehaviour
                 // Destroy the NPC
                 if (npc.IsSpawned && NetworkManager.Singleton != null && NetworkManager.Singleton.IsServer)
                 {
-                    npc.NetworkObject.Despawn();
-                }
-                else
-                {
-                    Destroy(npc.gameObject);
+                    npc.NetworkObject.Despawn(true);
                 }
 
                 cleared++;
