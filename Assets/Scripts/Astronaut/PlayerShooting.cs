@@ -55,6 +55,13 @@ public class PlayerShooting : MonoBehaviour
 
     void Start()
     {
+        // DEBUG: Check how many PlayerShooting scripts exist
+        var allShooters = FindObjectsOfType<PlayerShooting>();
+        if (allShooters.Length > 1)
+        {
+            Debug.LogError($"[PlayerShooting] WARNING: {allShooters.Length} PlayerShooting scripts found! This will cause issues!");
+        }
+
         FindCamera();
         currentAmmo = magazineSize;
 

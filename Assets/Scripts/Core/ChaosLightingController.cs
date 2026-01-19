@@ -197,16 +197,17 @@ public class ChaosLightingController : MonoBehaviour
         isChaosMode = true;
         Debug.Log("[ChaosLightingController] Transitioning to chaos lighting...");
 
-        // Play alarm and power down sounds (networked)
+        // Play sounds with slight delays to avoid audio spike
         if (NetworkAudioManager.Instance != null)
         {
             NetworkAudioManager.Instance.PlayPowerDown();
+            yield return new WaitForSeconds(0.1f);
             NetworkAudioManager.Instance.StartChaosAmbient();
         }
         else if (AudioManager.Instance != null)
         {
-            AudioManager.Instance.PlayAlarm();
             AudioManager.Instance.PlayPowerDown();
+            yield return new WaitForSeconds(0.1f);
             AudioManager.Instance.StartChaosAmbient();
         }
 

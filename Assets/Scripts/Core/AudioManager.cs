@@ -93,12 +93,96 @@ public class AudioManager : MonoBehaviour
         LoadVolumeSettings();
         LoadAudioFromResources();
 
+        // Preload all audio clips to avoid decompression stutter during gameplay
+        PreloadAllAudioClips();
+
         if (ambientLoop != null)
         {
             PlayAmbient(ambientLoop);
         }
 
         Debug.Log("[AudioManager] Initialized");
+    }
+
+    /// <summary>
+    /// Force Unity to decompress all audio clips now, avoiding stutters later
+    /// </summary>
+    void PreloadAllAudioClips()
+    {
+        AudioClip[] allClips = new AudioClip[]
+        {
+            gunShot, gunShotMinigun, gunEmpty, gunReload,
+            bulletImpactFlesh, bulletImpactMetal, bulletImpactConcrete,
+            ambientLoop, ambientChaos, alarmSound, heartbeatLoop,
+            uiHover, uiClick, uiBack,
+            npcDeath, npcPanic,
+            alienReveal, alienGrowl, alienAttack, alienKilled,
+            victoryStinger, defeatStinger, powerDown, lightsEmergency,
+            coffeeMachineSound, alarmTrigger, terminalBeep
+        };
+
+        int preloadedCount = 0;
+        foreach (var clip in allClips)
+        {
+            if (clip != null)
+            {
+                // Force load the audio data into memory
+                clip.LoadAudioData();
+                preloadedCount++;
+            }
+        }
+
+        // Also preload footstep arrays
+        if (footstepsMetal != null)
+        {
+            foreach (var clip in footstepsMetal)
+            {
+                if (clip != null) clip.LoadAudioData();
+            }
+        }
+        if (footstepsConcrete != null)
+        {
+            foreach (var clip in footstepsConcrete)
+            {
+                if (clip != null) clip.LoadAudioData();
+            }
+        }
+
+        Debug.Log($"[AudioManager] Preloaded {preloadedCount} audio clips to prevent runtime stutter");
+
+        // Force-play critical chaos sounds silently to fully initialize them
+        StartCoroutine(WarmUpCriticalSounds());
+    }
+
+    /// <summary>
+    /// Play critical sounds at zero volume to force Unity to fully initialize them
+    /// This prevents the first-play stutter
+    /// </summary>
+    System.Collections.IEnumerator WarmUpCriticalSounds()
+    {
+        yield return new WaitForSeconds(0.5f); // Wait for audio system to be ready
+
+        float originalVolume = masterVolume;
+        masterVolume = 0f; // Mute
+
+        // Play each critical sound briefly
+        AudioClip[] criticalClips = { powerDown, ambientChaos, alarmSound, lightsEmergency, alienReveal };
+
+        foreach (var clip in criticalClips)
+        {
+            if (clip != null)
+            {
+                AudioSource source = GetNextSFXSource();
+                source.clip = clip;
+                source.volume = 0f;
+                source.Play();
+                yield return new WaitForSeconds(0.05f);
+                source.Stop();
+            }
+        }
+
+        masterVolume = originalVolume; // Restore volume
+        Debug.Log("[AudioManager] Critical sounds warmed up - no stutter on first play");
     }
 
     /// <summary>
