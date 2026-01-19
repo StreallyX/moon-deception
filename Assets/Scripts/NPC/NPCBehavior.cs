@@ -74,6 +74,12 @@ public class NPCBehavior : NetworkBehaviour, IDamageable
     [Header("Zone")]
     [SerializeField] private MapZone assignedZone;
 
+    [Header("Chaos Panic")]
+    private bool isChaosMode = false;
+    private Vector3 panicDirection;
+    private float panicDirectionTimer = 0f;
+    private float panicDirectionChangeTime = 1.5f; // Change direction every 1.5 seconds
+
     private int currentWaypointIndex = 0;
     private float idleTimer = 0f;
     private float stateTimer = 0f;
@@ -144,7 +150,74 @@ public class NPCBehavior : NetworkBehaviour, IDamageable
         // Initialize quirk timing with random offset so NPCs don't all quirk at once
         nextQuirkTime = Time.time + Random.Range(minTimeBetweenQuirks, maxTimeBetweenQuirks);
 
+        // Subscribe to chaos phase
+        SubscribeToChaosEvent();
+
         Debug.Log($"[NPC] {npcName} initialized at {startPosition}. Waypoints: {waypoints.Count}, AutoPatrol: {autoPatrol}");
+    }
+
+    void SubscribeToChaosEvent()
+    {
+        if (GameManager.Instance != null)
+        {
+            GameManager.Instance.OnChaosPhase.AddListener(OnChaosPhaseStarted);
+            GameManager.Instance.OnGameEnd.AddListener(OnGameEnded);
+        }
+        else
+        {
+            StartCoroutine(LateSubscribeToChaos());
+        }
+    }
+
+    System.Collections.IEnumerator LateSubscribeToChaos()
+    {
+        float timeout = 5f;
+        float elapsed = 0f;
+
+        while (elapsed < timeout)
+        {
+            yield return new WaitForSeconds(0.5f);
+            elapsed += 0.5f;
+
+            if (GameManager.Instance != null)
+            {
+                GameManager.Instance.OnChaosPhase.AddListener(OnChaosPhaseStarted);
+                GameManager.Instance.OnGameEnd.AddListener(OnGameEnded);
+                yield break;
+            }
+        }
+    }
+
+    void OnChaosPhaseStarted()
+    {
+        isChaosMode = true;
+
+        // Start panicking immediately
+        if (currentState != NPCState.Dead)
+        {
+            // Pick initial random direction
+            PickNewPanicDirection();
+            SetState(NPCState.Panicking);
+        }
+    }
+
+    void OnGameEnded(GameManager.WinCondition winner)
+    {
+        isChaosMode = false;
+    }
+
+    void PickNewPanicDirection()
+    {
+        // Random direction with some forward bias
+        panicDirection = new Vector3(
+            Random.Range(-1f, 1f),
+            0f,
+            Random.Range(-1f, 1f)
+        ).normalized;
+
+        // Randomize time until next direction change
+        panicDirectionChangeTime = Random.Range(1f, 3f);
+        panicDirectionTimer = 0f;
     }
 
     void Update()
@@ -537,6 +610,58 @@ public class NPCBehavior : NetworkBehaviour, IDamageable
 
     private void HandlePanickingState()
     {
+        // If chaos mode is active, keep panicking forever
+        if (isChaosMode)
+        {
+            // Update direction change timer
+            panicDirectionTimer += Time.deltaTime;
+
+            // Change direction periodically or when hitting a wall
+            if (panicDirectionTimer >= panicDirectionChangeTime)
+            {
+                PickNewPanicDirection();
+            }
+
+            // Use the panic direction
+            Vector3 runDir = panicDirection;
+
+            // Rotate to face movement direction
+            if (runDir.sqrMagnitude > 0.01f)
+            {
+                Quaternion targetRotation = Quaternion.LookRotation(runDir);
+                transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, 8f * Time.deltaTime);
+            }
+
+            // Update animation with run speed (panic = running)
+            UpdateAnimation(runSpeed);
+
+            // Move
+            float moveDistance = runSpeed * Time.deltaTime;
+
+            if (characterController != null)
+            {
+                Vector3 moveVector = runDir * moveDistance;
+                CollisionFlags flags = characterController.Move(moveVector);
+
+                // If hit a wall, immediately pick new direction
+                if ((flags & CollisionFlags.Sides) != 0)
+                {
+                    PickNewPanicDirection();
+                    // Bounce off - turn around
+                    panicDirection = -panicDirection + new Vector3(Random.Range(-0.5f, 0.5f), 0, Random.Range(-0.5f, 0.5f));
+                    panicDirection.Normalize();
+                }
+
+                // Apply gravity
+                Vector3 verticalMove = Vector3.up * verticalVelocity * Time.deltaTime;
+                characterController.Move(verticalMove);
+            }
+
+            // Stay in panicking state - don't exit
+            return;
+        }
+
+        // Normal panic (not chaos mode) - limited duration
         if (stateTimer < 3f)
         {
             // Run away from start position
@@ -558,7 +683,6 @@ public class NPCBehavior : NetworkBehaviour, IDamageable
 
             // Check for obstacles before moving (prevents passing through walls)
             float moveDistance = runSpeed * Time.deltaTime;
-
 
             if (characterController != null)
             {
@@ -793,6 +917,16 @@ public class NPCBehavior : NetworkBehaviour, IDamageable
     public void ClearZone()
     {
         assignedZone = null;
+    }
+
+    void OnDestroy()
+    {
+        // Unsubscribe from events
+        if (GameManager.Instance != null)
+        {
+            GameManager.Instance.OnChaosPhase.RemoveListener(OnChaosPhaseStarted);
+            GameManager.Instance.OnGameEnd.RemoveListener(OnGameEnded);
+        }
     }
 
     void OnDrawGizmosSelected()
