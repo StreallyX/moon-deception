@@ -1086,4 +1086,86 @@ public class SpawnManager : MonoBehaviour
     /// All spawn point info (read-only access)
     /// </summary>
     public List<SpawnPointInfo> AllSpawnPoints => allSpawnPoints;
+
+    // ==================== NPC CLEANUP ====================
+
+    /// <summary>
+    /// Remove any NPCs that are too close to a player position.
+    /// Call this after spawning a player to ensure no NPC is inside them.
+    /// </summary>
+    public void ClearNPCsNearPosition(Vector3 position, float radius = 3f)
+    {
+        NPCBehavior[] allNPCs = FindObjectsOfType<NPCBehavior>();
+        int cleared = 0;
+
+        foreach (var npc in allNPCs)
+        {
+            if (npc == null || npc.IsDead) continue;
+
+            float distance = Vector3.Distance(npc.transform.position, position);
+            if (distance < radius)
+            {
+                Debug.Log($"[SpawnManager] Removing NPC '{npc.Name}' too close to player spawn (distance: {distance:F1}m)");
+
+                // Update spawn point tracking
+                foreach (var spawnInfo in allSpawnPoints)
+                {
+                    if (spawnInfo.occupantObject == npc.gameObject)
+                    {
+                        spawnInfo.occupant = SpawnPointOccupant.Empty;
+                        spawnInfo.occupantObject = null;
+                        break;
+                    }
+                }
+
+                // Destroy the NPC
+                if (npc.IsSpawned && NetworkManager.Singleton != null && NetworkManager.Singleton.IsServer)
+                {
+                    npc.NetworkObject.Despawn();
+                }
+                else
+                {
+                    Destroy(npc.gameObject);
+                }
+
+                cleared++;
+            }
+        }
+
+        if (cleared > 0)
+        {
+            Debug.Log($"[SpawnManager] Cleared {cleared} NPCs near player spawn position");
+        }
+    }
+
+    /// <summary>
+    /// Remove NPCs near all players in the scene.
+    /// Call this at game start to ensure no player is inside an NPC.
+    /// </summary>
+    public void ClearNPCsNearAllPlayers(float radius = 3f)
+    {
+        // Clear near astronaut
+        var astronaut = FindObjectOfType<PlayerMovement>();
+        if (astronaut != null)
+        {
+            ClearNPCsNearPosition(astronaut.transform.position, radius);
+        }
+
+        // Clear near alien
+        var alien = FindObjectOfType<AlienController>();
+        if (alien != null)
+        {
+            ClearNPCsNearPosition(alien.transform.position, radius);
+        }
+
+        // Clear near any networked players
+        var networkedPlayers = FindObjectsOfType<NetworkedPlayer>();
+        foreach (var player in networkedPlayers)
+        {
+            if (player != null)
+            {
+                ClearNPCsNearPosition(player.transform.position, radius);
+            }
+        }
+    }
 }

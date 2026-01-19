@@ -1,4 +1,4 @@
-using UnityEngine;
+﻿using UnityEngine;
 using UnityEngine.Events;
 using System.Collections.Generic;
 
@@ -147,6 +147,9 @@ public class GameManager : MonoBehaviour
         if (SpawnManager.Instance != null)
         {
             SpawnManager.Instance.SpawnAllEntities();
+
+            // Clear any NPCs that spawned too close to players
+            SpawnManager.Instance.ClearNPCsNearAllPlayers(3f);
         }
 
         // Find all NPCs and aliens in scene
