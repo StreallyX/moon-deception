@@ -789,23 +789,36 @@ public class SpawnManager : MonoBehaviour
         }
         else
         {
-            zoneObj = new GameObject($"DefenseZone_{spawnedDefenseZones.Count + 1}");
-            zoneObj.transform.position = position;
-            zoneObj.AddComponent<DefenseZone>();
+            // Try to load 3D model from Resources
+            GameObject modelPrefab = Resources.Load<GameObject>("Interactables/DefenceZone");
 
-            // Add visual so it's visible
-            CreateInteractableVisual(zoneObj, Color.green); // Green for defense
+            if (modelPrefab != null)
+            {
+                zoneObj = Instantiate(modelPrefab, position, Quaternion.identity);
+                zoneObj.name = $"DefenseZone_{spawnedDefenseZones.Count + 1}";
+                Debug.Log($"[SpawnManager] Loaded DefenseZone 3D model from Resources");
+            }
+            else
+            {
+                zoneObj = new GameObject($"DefenseZone_{spawnedDefenseZones.Count + 1}");
+                zoneObj.transform.position = position;
+                // Visual will be created by DefenseZone.SetupVisuals()
+                Debug.Log($"[SpawnManager] DefenseZone model not found, using fallback cylinder");
+            }
+        }
+
+        // Add component if not already present
+        var zone = zoneObj.GetComponent<DefenseZone>();
+        if (zone == null)
+        {
+            zone = zoneObj.AddComponent<DefenseZone>();
         }
 
         // NOTE: Don't spawn as NetworkObject - dynamically created objects can't be networked
         // without registered prefabs. Defense zones will be created locally on each client.
 
-        var zone = zoneObj.GetComponent<DefenseZone>();
-        if (zone != null)
-        {
-            zone.zoneName = $"Defense Point {(char)('A' + spawnedDefenseZones.Count)}";
-            Debug.Log($"[SpawnManager] Created defense zone '{zone.zoneName}' at {position}");
-        }
+        zone.zoneName = $"Defense Point {(char)('A' + spawnedDefenseZones.Count)}";
+        Debug.Log($"[SpawnManager] Created defense zone '{zone.zoneName}' at {position}");
 
         return zone;
     }
@@ -950,18 +963,34 @@ public class SpawnManager : MonoBehaviour
         }
         else
         {
-            coffeeObj = new GameObject($"CoffeeMachine_{spawnedCoffeeMachines.Count + 1}");
-            coffeeObj.transform.position = position;
-            coffeeObj.AddComponent<CoffeeMachine>();
+            // Try to load 3D model from Resources
+            GameObject modelPrefab = Resources.Load<GameObject>("Interactables/CoffeMachine");
 
-            // Add visual so it's visible
-            CreateInteractableVisual(coffeeObj, new Color(0.6f, 0.4f, 0.2f)); // Brown for coffee
+            if (modelPrefab != null)
+            {
+                coffeeObj = Instantiate(modelPrefab, position, Quaternion.identity);
+                coffeeObj.name = $"CoffeeMachine_{spawnedCoffeeMachines.Count + 1}";
+                Debug.Log($"[SpawnManager] Loaded CoffeeMachine 3D model from Resources");
+            }
+            else
+            {
+                coffeeObj = new GameObject($"CoffeeMachine_{spawnedCoffeeMachines.Count + 1}");
+                coffeeObj.transform.position = position;
+                // Visual will be created by CoffeeMachine.SetupVisuals()
+                Debug.Log($"[SpawnManager] CoffeeMachine model not found, using fallback cube");
+            }
+        }
+
+        // Add component if not already present
+        var coffee = coffeeObj.GetComponent<CoffeeMachine>();
+        if (coffee == null)
+        {
+            coffee = coffeeObj.AddComponent<CoffeeMachine>();
         }
 
         // NOTE: Don't spawn as NetworkObject - dynamically created objects can't be networked
         // without registered prefabs. Interactables will be created locally on each client.
 
-        var coffee = coffeeObj.GetComponent<CoffeeMachine>();
         Debug.Log($"[SpawnManager] Created coffee machine at {position}");
         return coffee;
     }
@@ -976,18 +1005,34 @@ public class SpawnManager : MonoBehaviour
         }
         else
         {
-            alarmObj = new GameObject($"AlarmTerminal_{spawnedAlarmTerminals.Count + 1}");
-            alarmObj.transform.position = position;
-            alarmObj.AddComponent<AlarmTerminal>();
+            // Try to load 3D model from Resources
+            GameObject modelPrefab = Resources.Load<GameObject>("Interactables/Terminal");
 
-            // Add visual so it's visible
-            CreateInteractableVisual(alarmObj, Color.red); // Red for alarm
+            if (modelPrefab != null)
+            {
+                alarmObj = Instantiate(modelPrefab, position, Quaternion.identity);
+                alarmObj.name = $"AlarmTerminal_{spawnedAlarmTerminals.Count + 1}";
+                Debug.Log($"[SpawnManager] Loaded AlarmTerminal 3D model from Resources");
+            }
+            else
+            {
+                alarmObj = new GameObject($"AlarmTerminal_{spawnedAlarmTerminals.Count + 1}");
+                alarmObj.transform.position = position;
+                // Visual will be created by AlarmTerminal.SetupVisuals()
+                Debug.Log($"[SpawnManager] AlarmTerminal model not found, using fallback cube");
+            }
+        }
+
+        // Add component if not already present
+        var alarm = alarmObj.GetComponent<AlarmTerminal>();
+        if (alarm == null)
+        {
+            alarm = alarmObj.AddComponent<AlarmTerminal>();
         }
 
         // NOTE: Don't spawn as NetworkObject - dynamically created objects can't be networked
         // without registered prefabs. Alarm terminals will be created locally on each client.
 
-        var alarm = alarmObj.GetComponent<AlarmTerminal>();
         Debug.Log($"[SpawnManager] Created alarm terminal at {position}");
         return alarm;
     }

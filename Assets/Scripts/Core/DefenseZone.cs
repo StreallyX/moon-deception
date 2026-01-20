@@ -131,12 +131,18 @@ public class DefenseZone : MonoBehaviour
 
     void SetupVisuals()
     {
-        // Create floor marker if no renderer
+        // Check if we already have a 3D model (loaded from FBX)
         zoneRenderer = GetComponent<MeshRenderer>();
-
         if (zoneRenderer == null)
         {
-            // Create a simple cylinder as zone marker
+            zoneRenderer = GetComponentInChildren<MeshRenderer>();
+        }
+
+        bool has3DModel = zoneRenderer != null;
+
+        if (!has3DModel)
+        {
+            // No 3D model found - create a simple cylinder as zone marker
             GameObject marker = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
             marker.transform.SetParent(transform);
             marker.transform.localPosition = Vector3.zero;
@@ -147,6 +153,10 @@ public class DefenseZone : MonoBehaviour
             if (markerCollider != null) Destroy(markerCollider);
 
             zoneRenderer = marker.GetComponent<MeshRenderer>();
+        }
+        else
+        {
+            Debug.Log($"[DefenseZone] Using existing 3D model");
         }
 
         // Create material - try multiple shaders for build compatibility
@@ -188,8 +198,17 @@ public class DefenseZone : MonoBehaviour
             zoneMaterial.renderQueue = 3000;
         }
 
-        zoneMaterial.color = inactiveColor;
-        zoneRenderer.material = zoneMaterial;
+        // Only apply our material if we created a fallback (not for 3D models)
+        if (!has3DModel)
+        {
+            zoneMaterial.color = inactiveColor;
+            zoneRenderer.material = zoneMaterial;
+        }
+        else
+        {
+            // For 3D model, get its existing material
+            zoneMaterial = zoneRenderer.material;
+        }
 
         // Create zone light if none - make it BRIGHT for chaos visibility
         if (zoneLight == null)
@@ -205,7 +224,7 @@ public class DefenseZone : MonoBehaviour
             zoneLight.color = activeColor;
         }
 
-        Debug.Log($"[DefenseZone] Visual setup complete. Shader: {shader?.name ?? "NULL"}");
+        Debug.Log($"[DefenseZone] Visual setup complete. Has3DModel: {has3DModel}, Shader: {shader?.name ?? "NULL"}");
     }
 
     void Update()

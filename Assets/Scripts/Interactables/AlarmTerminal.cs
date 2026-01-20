@@ -39,12 +39,18 @@ public class AlarmTerminal : Interactable
 
     void SetupVisuals()
     {
-        // Create visual if none exists
+        // Check if we already have a 3D model (loaded from FBX)
         terminalRenderer = GetComponent<MeshRenderer>();
-
         if (terminalRenderer == null)
         {
-            // Create a simple terminal placeholder
+            terminalRenderer = GetComponentInChildren<MeshRenderer>();
+        }
+
+        bool has3DModel = terminalRenderer != null;
+
+        if (!has3DModel)
+        {
+            // No 3D model found - create a simple terminal placeholder
             GameObject meshObj = GameObject.CreatePrimitive(PrimitiveType.Cube);
             meshObj.transform.SetParent(transform);
             meshObj.transform.localPosition = new Vector3(0f, 0.75f, 0f);
@@ -74,14 +80,20 @@ public class AlarmTerminal : Interactable
                 screenMat.color = idleColor;
                 screenRenderer.material = screenMat;
             }
+
+            // Create material for fallback cube
+            terminalMaterial = new Material(Shader.Find("Standard"));
+            terminalMaterial.color = Color.gray;
+            terminalRenderer.material = terminalMaterial;
+        }
+        else
+        {
+            // 3D model exists - get its material for effects
+            terminalMaterial = terminalRenderer.material;
+            Debug.Log($"[AlarmTerminal] Using existing 3D model");
         }
 
-        // Create material
-        terminalMaterial = new Material(Shader.Find("Standard"));
-        terminalMaterial.color = Color.gray;
-        terminalRenderer.material = terminalMaterial;
-
-        // Create alarm light if none
+        // Create alarm light if none (always add light for visibility)
         if (alarmLight == null)
         {
             GameObject lightObj = new GameObject("AlarmLight");

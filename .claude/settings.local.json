@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dir \"C:\\\\DEV\\\\moon-deception\\\\Assets\\\\Prefabs\" /B)"
+    ]
+  }
+}
