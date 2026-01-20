@@ -34,42 +34,16 @@ public class CoffeeMachine : Interactable
 
     void SetupVisuals()
     {
-        // Check if we already have a 3D model (loaded from FBX)
-        machineRenderer = GetComponent<MeshRenderer>();
-        if (machineRenderer == null)
+        // Get renderer from prefab (should already exist)
+        machineRenderer = GetComponentInChildren<MeshRenderer>();
+
+        if (machineRenderer != null)
         {
-            machineRenderer = GetComponentInChildren<MeshRenderer>();
-        }
-
-        bool has3DModel = machineRenderer != null;
-
-        if (!has3DModel)
-        {
-            // No 3D model found - create a simple coffee machine placeholder
-            GameObject meshObj = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            meshObj.transform.SetParent(transform);
-            meshObj.transform.localPosition = new Vector3(0f, 0.5f, 0f);
-            meshObj.transform.localScale = new Vector3(0.8f, 1.2f, 0.6f);
-
-            // Remove collider from mesh (we have our own trigger)
-            var meshCollider = meshObj.GetComponent<Collider>();
-            if (meshCollider != null) Destroy(meshCollider);
-
-            machineRenderer = meshObj.GetComponent<MeshRenderer>();
-
-            // Create material for fallback cube
-            machineMaterial = new Material(Shader.Find("Standard"));
-            machineMaterial.color = highlightColor;
-            machineRenderer.material = machineMaterial;
-        }
-        else
-        {
-            // 3D model exists - get its material for effects
             machineMaterial = machineRenderer.material;
-            Debug.Log($"[CoffeeMachine] Using existing 3D model");
         }
 
-        // Create light if none (always add light for visibility)
+        // Get or create light for visual feedback
+        machineLight = GetComponentInChildren<Light>();
         if (machineLight == null)
         {
             GameObject lightObj = new GameObject("MachineLight");

@@ -39,61 +39,16 @@ public class AlarmTerminal : Interactable
 
     void SetupVisuals()
     {
-        // Check if we already have a 3D model (loaded from FBX)
-        terminalRenderer = GetComponent<MeshRenderer>();
-        if (terminalRenderer == null)
+        // Get renderer from prefab (should already exist)
+        terminalRenderer = GetComponentInChildren<MeshRenderer>();
+
+        if (terminalRenderer != null)
         {
-            terminalRenderer = GetComponentInChildren<MeshRenderer>();
-        }
-
-        bool has3DModel = terminalRenderer != null;
-
-        if (!has3DModel)
-        {
-            // No 3D model found - create a simple terminal placeholder
-            GameObject meshObj = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            meshObj.transform.SetParent(transform);
-            meshObj.transform.localPosition = new Vector3(0f, 0.75f, 0f);
-            meshObj.transform.localScale = new Vector3(0.5f, 1.5f, 0.3f);
-
-            // Remove collider from mesh
-            var meshCollider = meshObj.GetComponent<Collider>();
-            if (meshCollider != null) Destroy(meshCollider);
-
-            terminalRenderer = meshObj.GetComponent<MeshRenderer>();
-
-            // Add a "screen" on top
-            GameObject screen = GameObject.CreatePrimitive(PrimitiveType.Quad);
-            screen.transform.SetParent(meshObj.transform);
-            screen.transform.localPosition = new Vector3(0f, 0.2f, 0.51f);
-            screen.transform.localScale = new Vector3(0.8f, 0.4f, 1f);
-
-            var screenCollider = screen.GetComponent<Collider>();
-            if (screenCollider != null) Destroy(screenCollider);
-
-            var screenRenderer = screen.GetComponent<MeshRenderer>();
-            if (screenRenderer != null)
-            {
-                Material screenMat = new Material(Shader.Find("Standard"));
-                screenMat.EnableKeyword("_EMISSION");
-                screenMat.SetColor("_EmissionColor", idleColor * 0.5f);
-                screenMat.color = idleColor;
-                screenRenderer.material = screenMat;
-            }
-
-            // Create material for fallback cube
-            terminalMaterial = new Material(Shader.Find("Standard"));
-            terminalMaterial.color = Color.gray;
-            terminalRenderer.material = terminalMaterial;
-        }
-        else
-        {
-            // 3D model exists - get its material for effects
             terminalMaterial = terminalRenderer.material;
-            Debug.Log($"[AlarmTerminal] Using existing 3D model");
         }
 
-        // Create alarm light if none (always add light for visibility)
+        // Get or create light for visual feedback
+        alarmLight = GetComponentInChildren<Light>();
         if (alarmLight == null)
         {
             GameObject lightObj = new GameObject("AlarmLight");
@@ -103,7 +58,7 @@ public class AlarmTerminal : Interactable
             alarmLight = lightObj.AddComponent<Light>();
             alarmLight.type = LightType.Point;
             alarmLight.range = 10f;
-            alarmLight.intensity = 0f;
+            alarmLight.intensity = 0.5f;
             alarmLight.color = alarmColor;
         }
 

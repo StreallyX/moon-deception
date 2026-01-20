@@ -131,86 +131,16 @@ public class DefenseZone : MonoBehaviour
 
     void SetupVisuals()
     {
-        // Check if we already have a 3D model (loaded from FBX)
-        zoneRenderer = GetComponent<MeshRenderer>();
-        if (zoneRenderer == null)
+        // Get renderer from prefab (should already exist)
+        zoneRenderer = GetComponentInChildren<MeshRenderer>();
+
+        if (zoneRenderer != null)
         {
-            zoneRenderer = GetComponentInChildren<MeshRenderer>();
-        }
-
-        bool has3DModel = zoneRenderer != null;
-
-        if (!has3DModel)
-        {
-            // No 3D model found - create a simple cylinder as zone marker
-            GameObject marker = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-            marker.transform.SetParent(transform);
-            marker.transform.localPosition = Vector3.zero;
-            marker.transform.localScale = new Vector3(4f, 0.1f, 4f);
-
-            // Remove collider from marker
-            var markerCollider = marker.GetComponent<Collider>();
-            if (markerCollider != null) Destroy(markerCollider);
-
-            zoneRenderer = marker.GetComponent<MeshRenderer>();
-        }
-        else
-        {
-            Debug.Log($"[DefenseZone] Using existing 3D model");
-        }
-
-        // Create material - try multiple shaders for build compatibility
-        Shader shader = Shader.Find("Universal Render Pipeline/Lit");
-        if (shader == null) shader = Shader.Find("Sprites/Default");
-        if (shader == null) shader = Shader.Find("Standard");
-        if (shader == null) shader = Shader.Find("UI/Default");
-        if (shader == null) shader = Shader.Find("Unlit/Color");
-        if (shader == null) shader = Shader.Find("Legacy Shaders/Diffuse");
-
-        if (shader == null)
-        {
-            Debug.LogError("[DefenseZone] No shader found! Visual effects will be broken.");
-            return;
-        }
-
-        zoneMaterial = new Material(shader);
-
-        // Configure for transparency
-        if (zoneMaterial.HasProperty("_Surface"))
-        {
-            // URP Lit shader
-            zoneMaterial.SetFloat("_Surface", 1); // Transparent
-            zoneMaterial.SetFloat("_Blend", 0); // Alpha
-            zoneMaterial.SetFloat("_AlphaClip", 0);
-            zoneMaterial.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
-            zoneMaterial.renderQueue = 3000;
-        }
-        else
-        {
-            // Standard shader fallback
-            zoneMaterial.SetFloat("_Mode", 3); // Transparent
-            zoneMaterial.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
-            zoneMaterial.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
-            zoneMaterial.SetInt("_ZWrite", 0);
-            zoneMaterial.DisableKeyword("_ALPHATEST_ON");
-            zoneMaterial.EnableKeyword("_ALPHABLEND_ON");
-            zoneMaterial.DisableKeyword("_ALPHAPREMULTIPLY_ON");
-            zoneMaterial.renderQueue = 3000;
-        }
-
-        // Only apply our material if we created a fallback (not for 3D models)
-        if (!has3DModel)
-        {
-            zoneMaterial.color = inactiveColor;
-            zoneRenderer.material = zoneMaterial;
-        }
-        else
-        {
-            // For 3D model, get its existing material
             zoneMaterial = zoneRenderer.material;
         }
 
-        // Create zone light if none - make it BRIGHT for chaos visibility
+        // Get or create light for visual feedback during chaos
+        zoneLight = GetComponentInChildren<Light>();
         if (zoneLight == null)
         {
             GameObject lightObj = new GameObject("ZoneLight");
@@ -219,12 +149,12 @@ public class DefenseZone : MonoBehaviour
 
             zoneLight = lightObj.AddComponent<Light>();
             zoneLight.type = LightType.Point;
-            zoneLight.range = 15f; // Larger range
+            zoneLight.range = 15f;
             zoneLight.intensity = 0f;
             zoneLight.color = activeColor;
         }
 
-        Debug.Log($"[DefenseZone] Visual setup complete. Has3DModel: {has3DModel}, Shader: {shader?.name ?? "NULL"}");
+        Debug.Log($"[DefenseZone] Visual setup complete");
     }
 
     void Update()

@@ -33,18 +33,22 @@ public abstract class Interactable : MonoBehaviour
 
     protected virtual void Start()
     {
-        // Auto-create trigger collider if missing
-        interactionCollider = GetComponent<Collider>();
+        // Look for existing trigger collider in this object or children
+        // The prefab should already have the trigger configured
+        Collider[] allColliders = GetComponentsInChildren<Collider>();
+        foreach (var col in allColliders)
+        {
+            if (col.isTrigger)
+            {
+                interactionCollider = col;
+                break;
+            }
+        }
+
+        // Warn if no trigger found (prefab not configured correctly)
         if (interactionCollider == null)
         {
-            SphereCollider sphere = gameObject.AddComponent<SphereCollider>();
-            sphere.radius = interactionRange;
-            sphere.isTrigger = true;
-            interactionCollider = sphere;
-        }
-        else
-        {
-            interactionCollider.isTrigger = true;
+            Debug.LogWarning($"[Interactable] {gameObject.name} has no trigger collider! Add a SphereCollider with isTrigger=true");
         }
 
         // Find player and alien transforms
