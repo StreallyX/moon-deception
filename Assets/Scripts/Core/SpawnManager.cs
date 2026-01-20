@@ -794,7 +794,9 @@ public class SpawnManager : MonoBehaviour
 
             if (modelPrefab != null)
             {
-                zoneObj = Instantiate(modelPrefab, position, Quaternion.identity);
+                Vector3 adjustedPos = position + Vector3.up * 0.2f; // Lift above ground
+                zoneObj = Instantiate(modelPrefab, adjustedPos, Quaternion.Euler(-90f, 0f, 0f));
+                zoneObj.transform.localScale = new Vector3(-80f, -80f, -1.2f);
                 zoneObj.name = $"DefenseZone_{spawnedDefenseZones.Count + 1}";
                 Debug.Log($"[SpawnManager] Loaded DefenseZone 3D model from Resources");
             }
@@ -968,7 +970,9 @@ public class SpawnManager : MonoBehaviour
 
             if (modelPrefab != null)
             {
-                coffeeObj = Instantiate(modelPrefab, position, Quaternion.identity);
+                Vector3 adjustedPos = position + Vector3.up * 2.1f; // Lift above ground
+                coffeeObj = Instantiate(modelPrefab, adjustedPos, Quaternion.Euler(-90f, 0f, 0f));
+                coffeeObj.transform.localScale = Vector3.one * 50f; // Half size
                 coffeeObj.name = $"CoffeeMachine_{spawnedCoffeeMachines.Count + 1}";
                 Debug.Log($"[SpawnManager] Loaded CoffeeMachine 3D model from Resources");
             }
@@ -1010,7 +1014,9 @@ public class SpawnManager : MonoBehaviour
 
             if (modelPrefab != null)
             {
-                alarmObj = Instantiate(modelPrefab, position, Quaternion.identity);
+                Vector3 adjustedPos = position + Vector3.up * 1f; // Lift above ground
+                alarmObj = Instantiate(modelPrefab, adjustedPos, Quaternion.Euler(-90f, 0f, 0f));
+                alarmObj.transform.localScale = Vector3.one * 21f; // Half size
                 alarmObj.name = $"AlarmTerminal_{spawnedAlarmTerminals.Count + 1}";
                 Debug.Log($"[SpawnManager] Loaded AlarmTerminal 3D model from Resources");
             }
