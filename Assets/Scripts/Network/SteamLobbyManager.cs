@@ -168,7 +168,7 @@ public class SteamLobbyManager : MonoBehaviour
         SteamMatchmaking.SetLobbyMemberData(CurrentLobbyID, "ready", "0");
 
         // Notify UI to refresh
-        OnPlayersUpdated?.Invoke(Players);
+        OnPlayerListUpdated?.Invoke();
     }
 
     /// <summary>

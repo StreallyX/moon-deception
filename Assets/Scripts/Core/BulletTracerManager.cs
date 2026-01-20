@@ -64,6 +64,12 @@ public class BulletTracerManager : MonoBehaviour
 
         while (elapsed < tracerDuration)
         {
+            // Check if object was destroyed
+            if (lineRenderer == null || tracerObj == null)
+            {
+                yield break;
+            }
+
             elapsed += Time.deltaTime;
             float alpha = 1f - (elapsed / tracerDuration);
 
@@ -74,8 +80,8 @@ public class BulletTracerManager : MonoBehaviour
         }
 
         // Cleanup
-        Destroy(tracerMaterial);
-        Destroy(tracerObj);
+        if (tracerMaterial != null) Destroy(tracerMaterial);
+        if (tracerObj != null) Destroy(tracerObj);
     }
 
     /// <summary>

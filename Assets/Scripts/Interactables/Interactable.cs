@@ -23,10 +23,14 @@ public abstract class Interactable : MonoBehaviour
     protected bool isPlayerNearby = false;
     protected bool isAlienNearby = false;
     protected bool isUsable = true;
+    private bool wasShowingPrompt = false;
 
     private Transform playerTransform;
     private Transform alienTransform;
     private Collider interactionCollider;
+
+    // Track which interactable is currently showing the prompt
+    private static Interactable currentPromptOwner = null;
 
     public bool CanUse => isUsable && Time.time - lastUseTime >= cooldownTime;
     public float CooldownRemaining => Mathf.Max(0f, cooldownTime - (Time.time - lastUseTime));
@@ -117,30 +121,34 @@ public abstract class Interactable : MonoBehaviour
     /// </summary>
     protected virtual void HandleInput()
     {
-        if (!CanUse) return;
-
         bool shouldShowPrompt = false;
         bool isAlienInteracting = false;
 
-        // Check if alien is nearby and controlled
-        if (isAlienNearby && alienCanUse && AlienController.IsAlienControlled)
+        // Only show prompt if we can use the interactable
+        if (CanUse)
         {
-            shouldShowPrompt = true;
-            isAlienInteracting = true;
-        }
-        // Check if astronaut is nearby and controlled
-        else if (isPlayerNearby && astronautCanUse && !AlienController.IsAlienControlled)
-        {
-            shouldShowPrompt = true;
-            isAlienInteracting = false;
+            // Check if alien is nearby and controlled
+            if (isAlienNearby && alienCanUse && AlienController.IsAlienControlled)
+            {
+                shouldShowPrompt = true;
+                isAlienInteracting = true;
+            }
+            // Check if astronaut is nearby and controlled
+            else if (isPlayerNearby && astronautCanUse && !AlienController.IsAlienControlled)
+            {
+                shouldShowPrompt = true;
+                isAlienInteracting = false;
+            }
         }
 
         if (shouldShowPrompt)
         {
-            // Show interaction prompt
+            // Show interaction prompt and claim ownership
             if (GameUIManager.Instance != null)
             {
                 GameUIManager.Instance.ShowInteractionPrompt(interactionPrompt);
+                currentPromptOwner = this;
+                wasShowingPrompt = true;
             }
 
             // Handle E key press
@@ -149,10 +157,11 @@ public abstract class Interactable : MonoBehaviour
                 OnInteract(isAlienInteracting);
             }
         }
-        else
+        else if (wasShowingPrompt)
         {
-            // Hide prompt if we were showing it
+            // We were showing the prompt but should stop now
             HidePromptIfNeeded();
+            wasShowingPrompt = false;
         }
     }
 
@@ -195,12 +204,38 @@ public abstract class Interactable : MonoBehaviour
     }
 
     /// <summary>
-    /// Hide interaction prompt if it's being shown
+    /// Hide interaction prompt if we're the one showing it
     /// </summary>
     protected void HidePromptIfNeeded()
     {
-        // Only hide if we're not showing another prompt
-        // This is handled by GameUIManager
+        // Only hide if we're the current owner of the prompt
+        if (currentPromptOwner == this)
+        {
+            if (GameUIManager.Instance != null)
+            {
+                GameUIManager.Instance.HideInteractionPrompt();
+            }
+            currentPromptOwner = null;
+        }
+    }
+
+    void OnDisable()
+    {
+        // Hide prompt if we were showing it
+        if (wasShowingPrompt)
+        {
+            HidePromptIfNeeded();
+            wasShowingPrompt = false;
+        }
+    }
+
+    void OnDestroy()
+    {
+        // Clean up prompt ownership
+        if (currentPromptOwner == this)
+        {
+            currentPromptOwner = null;
+        }
     }
 
     // ==================== TRIGGER DETECTION ====================
