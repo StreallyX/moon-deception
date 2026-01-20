@@ -150,6 +150,28 @@ public class SteamLobbyManager : MonoBehaviour
     }
 
     /// <summary>
+    /// Reset game state in lobby (after a game ends, to allow starting a new game)
+    /// </summary>
+    public void ResetGameState()
+    {
+        if (!InLobby) return;
+
+        Debug.Log("[SteamLobby] Resetting game state for new game");
+
+        // Reset game started flag
+        if (IsHost)
+        {
+            SteamMatchmaking.SetLobbyData(CurrentLobbyID, "gameStarted", "0");
+        }
+
+        // Reset all players' ready status
+        SteamMatchmaking.SetLobbyMemberData(CurrentLobbyID, "ready", "0");
+
+        // Notify UI to refresh
+        OnPlayersUpdated?.Invoke(Players);
+    }
+
+    /// <summary>
     /// Request list of available lobbies
     /// </summary>
     public void RequestLobbyList()

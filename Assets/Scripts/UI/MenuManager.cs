@@ -64,7 +64,38 @@ public class MenuManager : MonoBehaviour
             ShowMainMenu();
         }
 
+        // Subscribe to scene changes to reset menu state
+        SceneManager.sceneLoaded += OnSceneLoaded;
+
         Debug.Log("[MenuManager] Initialized");
+    }
+
+    void OnDestroy()
+    {
+        SceneManager.sceneLoaded -= OnSceneLoaded;
+    }
+
+    void OnSceneLoaded(Scene scene, LoadSceneMode mode)
+    {
+        Debug.Log($"[MenuManager] Scene loaded: {scene.name}");
+
+        // Always hide game over panel when changing scenes
+        HideAllMenus();
+
+        // Check if we're in the main menu scene
+        if (scene.name == "MainMenu")
+        {
+            isMainMenu = true;
+            isPaused = false;
+            Cursor.lockState = CursorLockMode.None;
+            Cursor.visible = true;
+            Time.timeScale = 1f;
+            // Don't show main menu here - let MainMenuUI handle it
+        }
+        else
+        {
+            isMainMenu = false;
+        }
     }
 
     void Update()
@@ -288,8 +319,11 @@ public class MenuManager : MonoBehaviour
     /// </summary>
     private bool IsSteamLobbyGame()
     {
-        // TODO: Check Steamworks integration
-        // For now, return false (not implemented yet)
+        // Check if SteamLobbyManager exists and we're in a lobby
+        if (SteamLobbyManager.Instance != null && SteamLobbyManager.Instance.InLobby)
+        {
+            return true;
+        }
         return false;
     }
 
@@ -298,28 +332,54 @@ public class MenuManager : MonoBehaviour
     /// </summary>
     private bool IsTestModeGame()
     {
-        // Check if NetworkManager exists and how we connected
+        // If we're in a Steam lobby, it's not test mode
+        if (IsSteamLobbyGame())
+        {
+            return false;
+        }
+
+        // Check if NetworkManager exists and connected (H/J keys)
         if (Unity.Netcode.NetworkManager.Singleton != null &&
             Unity.Netcode.NetworkManager.Singleton.IsConnectedClient)
         {
-            // If connected via NetworkManager, it's likely test mode (H/J)
             return true;
         }
         return false;
     }
 
     /// <summary>
-    /// Return to Steam lobby with same players
+    /// Return to Steam lobby with same players (don't leave the lobby)
     /// </summary>
     public void ReturnToSteamLobby()
     {
+        Debug.Log("[MenuManager] Returning to Steam lobby...");
+
         Time.timeScale = 1f;
         isPaused = false;
+        HideAllMenus();
 
-        // TODO: Implement Steam lobby return
-        // For now, just go to main menu
-        Debug.Log("[MenuManager] Steam lobby return not implemented yet - going to main menu");
-        ReturnToMainMenu();
+        // Disconnect from game network but KEEP the Steam lobby
+        if (Unity.Netcode.NetworkManager.Singleton != null &&
+            Unity.Netcode.NetworkManager.Singleton.IsConnectedClient)
+        {
+            Debug.Log("[MenuManager] Shutting down NetworkManager (keeping Steam lobby)");
+            Unity.Netcode.NetworkManager.Singleton.Shutdown();
+        }
+
+        // Reset game state
+        if (GameManager.Instance != null)
+        {
+            GameManager.Instance.ResetGame();
+        }
+
+        // Reset lobby game state so players can start a new game
+        if (SteamLobbyManager.Instance != null)
+        {
+            SteamLobbyManager.Instance.ResetGameState();
+        }
+
+        // Load the main menu scene (which has the Steam lobby UI)
+        SceneManager.LoadScene("MainMenu");
     }
 
     // ==================== UI CREATION HELPERS ====================
@@ -591,8 +651,11 @@ public class MenuManager : MonoBehaviour
 
     public void ReturnToMainMenu()
     {
+        Debug.Log("[MenuManager] Returning to main menu...");
+
         Time.timeScale = 1f;
         isPaused = false;
+        HideAllMenus();
 
         // Disconnect from network if connected
         if (Unity.Netcode.NetworkManager.Singleton != null &&
@@ -602,13 +665,21 @@ public class MenuManager : MonoBehaviour
             Unity.Netcode.NetworkManager.Singleton.Shutdown();
         }
 
+        // Leave Steam lobby if we're in one (we want to go to main menu, not lobby)
+        if (SteamLobbyManager.Instance != null && SteamLobbyManager.Instance.InLobby)
+        {
+            Debug.Log("[MenuManager] Leaving Steam lobby...");
+            SteamLobbyManager.Instance.LeaveLobby();
+        }
+
         // Reset game
         if (GameManager.Instance != null)
         {
             GameManager.Instance.ResetGame();
         }
 
-        ShowMainMenu();
+        // Load main menu scene
+        SceneManager.LoadScene("MainMenu");
     }
 
     public void RestartGame()

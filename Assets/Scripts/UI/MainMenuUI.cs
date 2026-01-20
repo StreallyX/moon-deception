@@ -57,11 +57,20 @@ public class MainMenuUI : MonoBehaviour
         // Create status texts if not assigned
         EnsureStatusTexts();
 
-        // Show main menu
-        ShowMainMenu();
-
         // Update Steam status
         UpdateSteamStatus();
+
+        // Check if we're returning from a game while still in a Steam lobby
+        if (SteamLobbyManager.Instance != null && SteamLobbyManager.Instance.InLobby)
+        {
+            Debug.Log("[MainMenu] Already in a Steam lobby - showing lobby room");
+            ShowLobbyRoom();
+        }
+        else
+        {
+            // Show main menu
+            ShowMainMenu();
+        }
     }
 
     void EnsureStatusTexts()
