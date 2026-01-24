@@ -136,7 +136,7 @@ public class ChaosLightingController : MonoBehaviour
         originalIntensities.Clear();
         originalColors.Clear();
 
-        Light[] allLights = FindObjectsOfType<Light>();
+        Light[] allLights = FindObjectsByType<Light>(FindObjectsSortMode.None);
         foreach (var light in allLights)
         {
             // Skip lights that are part of UI or particles
@@ -374,6 +374,12 @@ public class ChaosLightingController : MonoBehaviour
 
     void OnDestroy()
     {
+        // CRITICAL: Clear static instance to prevent stale references after scene reload
+        if (Instance == this)
+        {
+            Instance = null;
+        }
+
         // Restore settings
         RenderSettings.ambientIntensity = originalAmbientIntensity;
         RenderSettings.ambientLight = originalAmbientColor;

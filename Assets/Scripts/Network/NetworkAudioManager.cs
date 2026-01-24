@@ -59,7 +59,7 @@ public class NetworkAudioManager : MonoBehaviour
         }
 
         // Fallback: find any NetworkedPlayer in scene
-        return FindObjectOfType<NetworkedPlayer>();
+        return FindFirstObjectByType<NetworkedPlayer>();
     }
 
     // ==================== GUNSHOTS ====================
@@ -684,12 +684,15 @@ public class NetworkAudioManager : MonoBehaviour
     }
 
     /// <summary>
-    /// Ability 4: Wind - synced effects
+    /// Ability 4: Teleport - synced effects (particles at both positions)
     /// </summary>
-    public void UseWindAbility(Vector3 position)
+    public void UseTeleportAbility(Vector3 alienPosition, Vector3 npcPosition)
     {
         if (!ShouldSync())
         {
+            // Single player - create local effects
+            CreateTeleportEffectLocal(alienPosition);
+            CreateTeleportEffectLocal(npcPosition);
             AudioManager.Instance?.PlayPowerDown();
             return;
         }
@@ -697,8 +700,46 @@ public class NetworkAudioManager : MonoBehaviour
         var player = FindAnyNetworkedPlayer();
         if (player != null)
         {
-            player.UseWindAbilityServerRpc(position);
+            player.UseTeleportAbilityServerRpc(alienPosition, npcPosition);
         }
+    }
+
+    /// <summary>
+    /// Create local teleport particle effect
+    /// </summary>
+    public void CreateTeleportEffectLocal(Vector3 position)
+    {
+        GameObject fx = new GameObject("TeleportEffect");
+        fx.transform.position = position + Vector3.up;
+
+        var ps = fx.AddComponent<ParticleSystem>();
+        ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+
+        var main = ps.main;
+        main.duration = 0.5f;
+        main.loop = false;
+        main.startLifetime = 0.8f;
+        main.startSpeed = 5f;
+        main.startSize = 0.3f;
+        main.startColor = new Color(0.5f, 0f, 1f, 0.9f); // Purple particles
+        main.maxParticles = 50;
+        main.gravityModifier = -0.5f;
+
+        var emission = ps.emission;
+        emission.rateOverTime = 0;
+        emission.SetBursts(new ParticleSystem.Burst[] { new ParticleSystem.Burst(0f, 40) });
+
+        var shape = ps.shape;
+        shape.shapeType = ParticleSystemShapeType.Sphere;
+        shape.radius = 0.5f;
+
+        var renderer = fx.GetComponent<ParticleSystemRenderer>();
+        Shader shader = Shader.Find("Particles/Standard Unlit");
+        if (shader == null) shader = Shader.Find("Sprites/Default");
+        if (shader != null) renderer.material = new Material(shader);
+
+        ps.Play();
+        Object.Destroy(fx, 2f);
     }
 
     // ==================== BULLET EFFECTS ====================

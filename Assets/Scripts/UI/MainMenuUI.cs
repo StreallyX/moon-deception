@@ -178,7 +178,7 @@ public class MainMenuUI : MonoBehaviour
 
     void EnsureAudioListener()
     {
-        if (FindObjectOfType<AudioListener>() == null)
+        if (FindFirstObjectByType<AudioListener>() == null)
         {
             // Try to add to main camera first
             Camera mainCam = Camera.main;
@@ -236,7 +236,7 @@ public class MainMenuUI : MonoBehaviour
         if (canvas != null) canvas.gameObject.SetActive(false);
 
         // Find and hide any other menu canvases
-        Canvas[] allCanvases = FindObjectsOfType<Canvas>();
+        Canvas[] allCanvases = FindObjectsByType<Canvas>(FindObjectsSortMode.None);
         foreach (var c in allCanvases)
         {
             if (c.gameObject.name.Contains("Menu") || c.gameObject.name.Contains("Canvas"))

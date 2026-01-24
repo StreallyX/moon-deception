@@ -112,7 +112,7 @@ public class PlayerMovement : MonoBehaviour
 
         // STEP 1: Disable ALL other cameras and AudioListeners FIRST
         Debug.Log("[PlayerMovement] Disabling all other cameras...");
-        Camera[] allCameras = FindObjectsOfType<Camera>(true);
+        Camera[] allCameras = FindObjectsByType<Camera>(FindObjectsInactive.Include, FindObjectsSortMode.None);
         foreach (Camera cam in allCameras)
         {
             if (playerCamera == null || cam != playerCamera)
@@ -122,7 +122,7 @@ public class PlayerMovement : MonoBehaviour
             }
         }
 
-        AudioListener[] allListeners = FindObjectsOfType<AudioListener>(true);
+        AudioListener[] allListeners = FindObjectsByType<AudioListener>(FindObjectsInactive.Include, FindObjectsSortMode.None);
         foreach (var listener in allListeners)
         {
             listener.enabled = false;
@@ -270,8 +270,9 @@ public class PlayerMovement : MonoBehaviour
 
     void Update()
     {
+        // For remote players, NetworkAnimator handles animation sync
         if (!isControlled) return;
-        
+
         // === FIXED: Move() called EVERY frame to keep isGrounded updated ===
         
         // 1. Handle mouse look
@@ -343,19 +344,31 @@ public class PlayerMovement : MonoBehaviour
     /// <summary>
     /// Update animation based on movement speed (visible to other players)
     /// </summary>
+    private NetworkedPlayer networkedPlayer;
+
     private void UpdateAnimation(float currentSpeed)
     {
         if (animator == null) return;
 
         bool isMoving = currentSpeed > 0.1f;
 
-        // Set parameters on animator (NetworkAnimator will sync automatically)
+        // Set parameters on animator
         animator.SetFloat("Speed", currentSpeed);
         animator.SetBool("IsMoving", isMoving);
 
         // Control animation playback speed: walk = 1x, run = faster
         float speedRatio = currentSpeed / walkSpeed;
         animator.speed = Mathf.Clamp(speedRatio, 0.5f, 2f);
+
+        // NETWORK SYNC: Send animation state to all other clients
+        if (networkedPlayer == null)
+        {
+            networkedPlayer = GetComponent<NetworkedPlayer>();
+        }
+        if (networkedPlayer != null)
+        {
+            networkedPlayer.SyncAnimationState(currentSpeed, isMoving);
+        }
     }
 
     void HandleMouseLook()
@@ -388,6 +401,9 @@ public class PlayerMovement : MonoBehaviour
     void OnGUI()
     {
         if (!isControlled) return;
+
+        // Don't show UI if game ended
+        if (GameManager.Instance != null && GameManager.Instance.CurrentPhase == GameManager.GamePhase.Ended) return;
 
         // Sprint hint - bottom left
         GUIStyle hintStyle = new GUIStyle(GUI.skin.label);

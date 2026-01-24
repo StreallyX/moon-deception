@@ -293,10 +293,22 @@ public class DefenseZone : MonoBehaviour
         Debug.Log($"[DefenseZone] Weapon collected at {zoneName}!");
 
         // Upgrade player's weapon to MINIGUN (infinite ammo, no reload)
-        var playerShooting = FindObjectOfType<PlayerShooting>();
-        if (playerShooting != null)
+        // NETWORK: Sync via RPC so all players see the upgrade
+        var networkedPlayer = FindFirstObjectByType<NetworkedPlayer>();
+        if (networkedPlayer != null && NetworkManager.Singleton != null && NetworkManager.Singleton.IsConnectedClient)
         {
-            playerShooting.UpgradeToMinigun();
+            // Use RPC to sync weapon upgrade to all clients
+            networkedPlayer.UpgradeToMinigunServerRpc();
+            Debug.Log("[DefenseZone] Sent minigun upgrade RPC");
+        }
+        else
+        {
+            // Fallback for single player
+            var playerShooting = FindFirstObjectByType<PlayerShooting>();
+            if (playerShooting != null)
+            {
+                playerShooting.UpgradeToMinigun();
+            }
         }
 
         // Visual feedback

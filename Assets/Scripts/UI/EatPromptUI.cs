@@ -47,7 +47,7 @@ public class EatPromptUI : MonoBehaviour
     void CreatePromptUI()
     {
         // Find or create canvas
-        Canvas canvas = FindObjectOfType<Canvas>();
+        Canvas canvas = FindFirstObjectByType<Canvas>();
         if (canvas == null)
         {
             GameObject canvasObj = new GameObject("Canvas");

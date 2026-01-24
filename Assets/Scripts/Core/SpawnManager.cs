@@ -105,7 +105,7 @@ public class SpawnManager : MonoBehaviour
     void Start()
     {
         // Find astronaut
-        var player = FindObjectOfType<PlayerMovement>();
+        var player = FindFirstObjectByType<PlayerMovement>();
         if (player != null)
         {
             astronautTransform = player.transform;
@@ -125,6 +125,28 @@ public class SpawnManager : MonoBehaviour
         hasSpawnedInteractables = false;
         hasSpawnedNPCs = false;
         Debug.Log("[SpawnManager] Spawn flags reset");
+    }
+
+    /// <summary>
+    /// Full reset of SpawnManager state - call when returning to lobby
+    /// This clears all spawn point references which become invalid after scene reload
+    /// </summary>
+    public void ResetAll()
+    {
+        Debug.Log("[SpawnManager] Full reset - clearing all spawn data");
+
+        // Reset flags
+        hasSpawnedEntities = false;
+        hasSpawnedInteractables = false;
+        hasSpawnedNPCs = false;
+
+        // Clear spawn points (they become null after scene reload)
+        allSpawnPoints.Clear();
+
+        // Clear astronaut reference
+        astronautTransform = null;
+
+        Debug.Log("[SpawnManager] Full reset complete");
     }
 
     /// <summary>
@@ -318,9 +340,22 @@ public class SpawnManager : MonoBehaviour
     {
         allSpawnPoints.Clear();
 
-        if (MapManager.Instance == null || MapManager.Instance.ZoneCount == 0)
+        if (MapManager.Instance == null)
         {
-            Debug.LogWarning("[SpawnManager] No zones found for spawn point collection");
+            Debug.LogWarning("[SpawnManager] MapManager.Instance is null - cannot collect spawn points");
+            return;
+        }
+
+        // Try to refresh zones if none found (may happen after scene reload)
+        if (MapManager.Instance.ZoneCount == 0)
+        {
+            Debug.Log("[SpawnManager] No zones found, asking MapManager to find zones in scene...");
+            MapManager.Instance.FindAllZonesInScene();
+        }
+
+        if (MapManager.Instance.ZoneCount == 0)
+        {
+            Debug.LogWarning("[SpawnManager] Still no zones found after refresh - spawn point collection failed");
             return;
         }
 
@@ -342,13 +377,15 @@ public class SpawnManager : MonoBehaviour
 
     /// <summary>
     /// Get list of spawn points with NPCs (for late join replacement)
+    /// Filters out invalid spawn points (null Transform after scene reload)
     /// </summary>
     public List<SpawnPointInfo> GetNPCOccupiedSpawnPoints()
     {
         List<SpawnPointInfo> npcPoints = new List<SpawnPointInfo>();
         foreach (var info in allSpawnPoints)
         {
-            if (info.occupant == SpawnPointOccupant.NPC && info.occupantObject != null)
+            // Filter out invalid spawn points (null Transform after scene reload)
+            if (info.occupant == SpawnPointOccupant.NPC && info.occupantObject != null && info.spawnPoint != null)
             {
                 npcPoints.Add(info);
             }
@@ -357,14 +394,15 @@ public class SpawnManager : MonoBehaviour
     }
 
     /// <summary>
-    /// Get list of empty spawn points
+    /// Get list of empty spawn points (filters out null/invalid spawn points)
     /// </summary>
     public List<SpawnPointInfo> GetEmptySpawnPoints()
     {
         List<SpawnPointInfo> emptyPoints = new List<SpawnPointInfo>();
         foreach (var info in allSpawnPoints)
         {
-            if (info.occupant == SpawnPointOccupant.Empty)
+            // Filter out invalid spawn points (null Transform after scene reload)
+            if (info.occupant == SpawnPointOccupant.Empty && info.spawnPoint != null)
             {
                 emptyPoints.Add(info);
             }
@@ -550,7 +588,22 @@ public class SpawnManager : MonoBehaviour
             return chosen;
         }
 
-        Debug.LogWarning("[SpawnManager] No spawn points available for player!");
+        // If no valid spawn points found, try to recollect (scene might have just loaded)
+        Debug.LogWarning("[SpawnManager] No valid spawn points found, attempting to recollect...");
+        CollectAllSpawnPoints();
+
+        // Try one more time after recollecting
+        emptyPoints = GetEmptySpawnPoints();
+        if (emptyPoints.Count > 0)
+        {
+            ShuffleList(emptyPoints);
+            var chosen = emptyPoints[0];
+            chosen.occupant = SpawnPointOccupant.Player;
+            Debug.Log($"[SpawnManager] Reserved spawn point after recollect at {chosen.spawnPoint.position}");
+            return chosen;
+        }
+
+        Debug.LogWarning("[SpawnManager] No spawn points available for player after recollect!");
         return null;
     }
 
@@ -655,7 +708,7 @@ public class SpawnManager : MonoBehaviour
         // Find astronaut position
         if (astronautTransform == null)
         {
-            var player = FindObjectOfType<PlayerMovement>();
+            var player = FindFirstObjectByType<PlayerMovement>();
             if (player != null)
             {
                 astronautTransform = player.transform;
@@ -695,7 +748,7 @@ public class SpawnManager : MonoBehaviour
     /// </summary>
     public void AssignAliensToNPCs(int alienCount)
     {
-        NPCBehavior[] allNPCs = FindObjectsOfType<NPCBehavior>();
+        NPCBehavior[] allNPCs = FindObjectsByType<NPCBehavior>(FindObjectsSortMode.None);
 
         if (allNPCs.Length == 0)
         {
@@ -747,7 +800,7 @@ public class SpawnManager : MonoBehaviour
             Debug.Log("[SpawnManager] No valid defense zone spawn points from MapManager, using fallback");
 
             // Check for existing defense zones in scene
-            DefenseZone[] existingZones = FindObjectsOfType<DefenseZone>();
+            DefenseZone[] existingZones = FindObjectsByType<DefenseZone>(FindObjectsSortMode.None);
             if (existingZones.Length > 0)
             {
                 spawnedDefenseZones.AddRange(existingZones);
@@ -1171,7 +1224,7 @@ public class SpawnManager : MonoBehaviour
             return;
         }
 
-        NPCBehavior[] allNPCs = FindObjectsOfType<NPCBehavior>();
+        NPCBehavior[] allNPCs = FindObjectsByType<NPCBehavior>(FindObjectsSortMode.None);
         int cleared = 0;
 
         foreach (var npc in allNPCs)
@@ -1217,21 +1270,21 @@ public class SpawnManager : MonoBehaviour
     public void ClearNPCsNearAllPlayers(float radius = 3f)
     {
         // Clear near astronaut
-        var astronaut = FindObjectOfType<PlayerMovement>();
+        var astronaut = FindFirstObjectByType<PlayerMovement>();
         if (astronaut != null)
         {
             ClearNPCsNearPosition(astronaut.transform.position, radius);
         }
 
         // Clear near alien
-        var alien = FindObjectOfType<AlienController>();
+        var alien = FindFirstObjectByType<AlienController>();
         if (alien != null)
         {
             ClearNPCsNearPosition(alien.transform.position, radius);
         }
 
         // Clear near any networked players
-        var networkedPlayers = FindObjectsOfType<NetworkedPlayer>();
+        var networkedPlayers = FindObjectsByType<NetworkedPlayer>(FindObjectsSortMode.None);
         foreach (var player in networkedPlayers)
         {
             if (player != null)

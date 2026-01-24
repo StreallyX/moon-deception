@@ -80,7 +80,7 @@ public class GameUIManager : MonoBehaviour
 
     void SetupCanvas()
     {
-        mainCanvas = FindObjectOfType<Canvas>();
+        mainCanvas = FindFirstObjectByType<Canvas>();
         if (mainCanvas == null)
         {
             GameObject canvasObj = new GameObject("GameCanvas");
@@ -394,11 +394,21 @@ public class GameUIManager : MonoBehaviour
             alienHealthBarPanel.SetActive(false);
     }
     
-    void HideAllUI()
+    public void HideAllUI()
     {
         HideAstronautUI();
         HideAlienUI();
         HideInteractionPrompt();
+    }
+
+    /// <summary>
+    /// Call when game ends to hide all gameplay UI
+    /// </summary>
+    public void OnGameEnded()
+    {
+        HideAllUI();
+        currentPlayerType = PlayerType.None;
+        Debug.Log("[GameUIManager] Game ended - all UI hidden");
     }
     
     public void ShowInteractionPrompt(string message = "Appuyer sur E")
@@ -625,6 +635,94 @@ void Update()
         {
             enemyHPBarPanel.SetActive(false);
         }
+    }
+
+    // Auto-hide notification after duration
+    if (notificationShowTimer > 0)
+    {
+        notificationShowTimer -= Time.deltaTime;
+        if (notificationShowTimer <= 0 && notificationPanel != null)
+        {
+            notificationPanel.SetActive(false);
+        }
+    }
+}
+
+// ==================== NOTIFICATION SYSTEM ====================
+// Shows temporary notifications to the player
+
+private GameObject notificationPanel;
+private Text notificationText;
+private float notificationShowTimer = 0f;
+
+void CreateNotificationPanel()
+{
+    if (mainCanvas == null) return;
+
+    // Create panel at top center (below enemy HP bar)
+    notificationPanel = new GameObject("NotificationPanel");
+    notificationPanel.transform.SetParent(mainCanvas.transform, false);
+
+    RectTransform panelRect = notificationPanel.AddComponent<RectTransform>();
+    panelRect.anchorMin = new Vector2(0.5f, 1f);
+    panelRect.anchorMax = new Vector2(0.5f, 1f);
+    panelRect.pivot = new Vector2(0.5f, 1f);
+    panelRect.anchoredPosition = new Vector2(0, -80);
+    panelRect.sizeDelta = new Vector2(500, 50);
+
+    // Background
+    Image bgImage = notificationPanel.AddComponent<Image>();
+    bgImage.color = new Color(0.8f, 0.2f, 0.2f, 0.9f);
+
+    // Text
+    GameObject textObj = new GameObject("NotificationText");
+    textObj.transform.SetParent(notificationPanel.transform, false);
+    RectTransform textRect = textObj.AddComponent<RectTransform>();
+    textRect.anchorMin = Vector2.zero;
+    textRect.anchorMax = Vector2.one;
+    textRect.offsetMin = new Vector2(10, 5);
+    textRect.offsetMax = new Vector2(-10, -5);
+
+    notificationText = textObj.AddComponent<Text>();
+    notificationText.text = "";
+    notificationText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+    notificationText.fontSize = 24;
+    notificationText.fontStyle = FontStyle.Bold;
+    notificationText.alignment = TextAnchor.MiddleCenter;
+    notificationText.color = Color.white;
+
+    Outline textOutline = textObj.AddComponent<Outline>();
+    textOutline.effectColor = Color.black;
+    textOutline.effectDistance = new Vector2(2, -2);
+
+    notificationPanel.SetActive(false);
+}
+
+/// <summary>
+/// Show a temporary notification message to the player
+/// </summary>
+public void ShowNotification(string message, float duration = 3f)
+{
+    if (notificationPanel == null)
+    {
+        CreateNotificationPanel();
+    }
+
+    if (notificationPanel != null)
+    {
+        notificationText.text = message;
+        notificationPanel.SetActive(true);
+        notificationShowTimer = duration;
+        Debug.Log($"[GameUIManager] Notification: {message}");
+    }
+}
+
+void OnDestroy()
+{
+    // CRITICAL: Clear static instance to prevent stale references after scene reload
+    if (Instance == this)
+    {
+        Instance = null;
     }
 }
 }

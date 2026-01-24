@@ -694,4 +694,13 @@ public class AudioManager : MonoBehaviour
         ambientVolume = PlayerPrefs.GetFloat("AmbientVolume", 0.7f);
         UpdateAllVolumes();
     }
+
+    void OnDestroy()
+    {
+        // CRITICAL: Clear static instance to prevent stale references after scene reload
+        if (Instance == this)
+        {
+            Instance = null;
+        }
+    }
 }

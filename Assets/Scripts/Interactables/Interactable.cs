@@ -56,13 +56,13 @@ public abstract class Interactable : MonoBehaviour
         }
 
         // Find player and alien transforms
-        var player = FindObjectOfType<PlayerMovement>();
+        var player = FindFirstObjectByType<PlayerMovement>();
         if (player != null)
         {
             playerTransform = player.transform;
         }
 
-        var alien = FindObjectOfType<AlienController>();
+        var alien = FindFirstObjectByType<AlienController>();
         if (alien != null)
         {
             alienTransform = alien.transform;
@@ -92,7 +92,7 @@ public abstract class Interactable : MonoBehaviour
         else
         {
             // Try to find player if not cached
-            var player = FindObjectOfType<PlayerMovement>();
+            var player = FindFirstObjectByType<PlayerMovement>();
             if (player != null)
             {
                 playerTransform = player.transform;
@@ -108,7 +108,7 @@ public abstract class Interactable : MonoBehaviour
         else
         {
             // Try to find alien if not cached
-            var alien = FindObjectOfType<AlienController>();
+            var alien = FindFirstObjectByType<AlienController>();
             if (alien != null)
             {
                 alienTransform = alien.transform;

@@ -141,4 +141,13 @@ public class CameraShake : MonoBehaviour
             Instance.Shake(duration, magnitude);
         }
     }
+
+    void OnDestroy()
+    {
+        // CRITICAL: Clear static instance to prevent stale references after scene reload
+        if (Instance == this)
+        {
+            Instance = null;
+        }
+    }
 }

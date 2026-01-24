@@ -69,11 +69,13 @@ public class SteamManager : MonoBehaviour {
 		s_instance = this;
 
 		if(s_EverInitialized) {
-			// This is almost always an error.
-			// The most common case where this happens is when SteamManager gets destroyed because of Application.Quit(),
-			// and then some Steamworks code in some other OnDestroy gets called afterwards, creating a new SteamManager.
-			// You should never call Steamworks functions in OnDestroy, always prefer OnDisable if possible.
-			throw new System.Exception("Tried to Initialize the SteamAPI twice in one session!");
+			// Steam was already initialized in this session.
+			// This can happen on scene reload - just reuse the existing initialization.
+			// Don't throw an exception, just mark this instance as initialized and continue.
+			Debug.Log("[SteamManager] Steam already initialized this session, reusing existing initialization.");
+			m_bInitialized = true;
+			DontDestroyOnLoad(gameObject);
+			return;
 		}
 
 		// We want our SteamManager Instance to persist across scenes.

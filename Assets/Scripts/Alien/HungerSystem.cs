@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEngine.UI;
 using System.Collections;
+using Unity.Netcode;
 
 /// <summary>
 /// Alien hunger system.
@@ -177,6 +178,14 @@ public class HungerSystem : MonoBehaviour
         isStarving = true;
         Debug.Log("[HungerSystem] STARVING! Alien is revealing itself!");
 
+        // NETWORK: Sync starving state to all clients (important for astronaut to know)
+        var networkedPlayer = GetComponent<NetworkedPlayer>();
+        if (networkedPlayer != null && NetworkManager.Singleton != null && NetworkManager.Singleton.IsConnectedClient)
+        {
+            networkedPlayer.SyncHungerServerRpc(currentHunger, true);
+            Debug.Log("[HungerSystem] Sent starving sync RPC");
+        }
+
         // Start glitch effect
         if (glitchCoroutine != null)
         {
@@ -339,9 +348,10 @@ public class HungerSystem : MonoBehaviour
 
     void OnGUI()
     {
-        // Don't show UI if disabled (chaos mode) or not controlled
+        // Don't show UI if disabled (chaos mode), not controlled, or game ended
         if (!enabled) return;
         if (!AlienController.IsAlienControlled) return;
+        if (GameManager.Instance != null && GameManager.Instance.CurrentPhase == GameManager.GamePhase.Ended) return;
 
         // Show coffee stacks warning
         if (coffeeStacks > 0)

@@ -72,6 +72,12 @@ public class MenuManager : MonoBehaviour
 
     void OnDestroy()
     {
+        // CRITICAL: Clear static instance to prevent stale references after scene reload
+        if (Instance == this)
+        {
+            Instance = null;
+        }
+
         SceneManager.sceneLoaded -= OnSceneLoaded;
     }
 
@@ -109,6 +115,11 @@ public class MenuManager : MonoBehaviour
             }
             else if (!isMainMenu && !gameOverPanel.activeSelf)
             {
+                // Don't pause if in spectator mode - spectator handles Escape differently
+                if (SpectatorController.Instance != null && SpectatorController.Instance.IsActive)
+                {
+                    return; // Let spectator controller handle it
+                }
                 TogglePause();
             }
         }
@@ -357,6 +368,27 @@ public class MenuManager : MonoBehaviour
         Time.timeScale = 1f;
         isPaused = false;
         HideAllMenus();
+
+        // Reset NetworkGameManager state BEFORE shutting down
+        if (NetworkGameManager.Instance != null)
+        {
+            Debug.Log("[MenuManager] Resetting NetworkGameManager state");
+            NetworkGameManager.Instance.ResetState();
+        }
+
+        // Reset SpawnManager - clears spawn point references that become invalid after scene reload
+        if (SpawnManager.Instance != null)
+        {
+            Debug.Log("[MenuManager] Resetting SpawnManager");
+            SpawnManager.Instance.ResetAll();
+        }
+
+        // Reset MapManager zones - they become invalid after scene reload
+        if (MapManager.Instance != null)
+        {
+            Debug.Log("[MenuManager] Clearing MapManager zones");
+            MapManager.Instance.RefreshZones();
+        }
 
         // Disconnect from game network but KEEP the Steam lobby
         if (Unity.Netcode.NetworkManager.Singleton != null &&
@@ -656,6 +688,49 @@ public class MenuManager : MonoBehaviour
         Time.timeScale = 1f;
         isPaused = false;
         HideAllMenus();
+
+        // === CLEANUP ALL GAMEPLAY UI ===
+        // Clear kill feed
+        if (KillFeedManager.Instance != null)
+        {
+            KillFeedManager.Instance.ClearAll();
+            Debug.Log("[MenuManager] Cleared kill feed");
+        }
+
+        // Deactivate spectator mode
+        if (SpectatorController.Instance != null)
+        {
+            SpectatorController.Instance.Deactivate();
+            Debug.Log("[MenuManager] Deactivated spectator mode");
+        }
+
+        // Hide all gameplay UI
+        if (GameUIManager.Instance != null)
+        {
+            GameUIManager.Instance.OnGameEnded();
+            Debug.Log("[MenuManager] Hidden all gameplay UI");
+        }
+
+        // Reset NetworkGameManager state BEFORE shutting down
+        if (NetworkGameManager.Instance != null)
+        {
+            Debug.Log("[MenuManager] Resetting NetworkGameManager state");
+            NetworkGameManager.Instance.ResetState();
+        }
+
+        // Reset SpawnManager - clears spawn point references that become invalid after scene reload
+        if (SpawnManager.Instance != null)
+        {
+            Debug.Log("[MenuManager] Resetting SpawnManager");
+            SpawnManager.Instance.ResetAll();
+        }
+
+        // Reset MapManager zones - they become invalid after scene reload
+        if (MapManager.Instance != null)
+        {
+            Debug.Log("[MenuManager] Clearing MapManager zones");
+            MapManager.Instance.RefreshZones();
+        }
 
         // Disconnect from network if connected
         if (Unity.Netcode.NetworkManager.Singleton != null &&

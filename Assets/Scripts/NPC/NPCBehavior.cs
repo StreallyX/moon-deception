@@ -757,7 +757,7 @@ public class NPCBehavior : NetworkBehaviour, IDamageable
     }
 
     [ServerRpc(RequireOwnership = false)]
-    private void PanicServerRpc()
+    public void PanicServerRpc()
     {
         ApplyPanic();
     }
@@ -850,7 +850,7 @@ public class NPCBehavior : NetworkBehaviour, IDamageable
             AudioManager.Instance.PlayNPCDeath(transform.position);
         }
 
-        var gameManager = FindObjectOfType<GameManager>();
+        var gameManager = FindFirstObjectByType<GameManager>();
         if (gameManager != null)
         {
             gameManager.OnNPCKilled(this);
@@ -919,7 +919,7 @@ public class NPCBehavior : NetworkBehaviour, IDamageable
         assignedZone = null;
     }
 
-    void OnDestroy()
+    public override void OnDestroy()
     {
         // Unsubscribe from events
         if (GameManager.Instance != null)
@@ -927,6 +927,7 @@ public class NPCBehavior : NetworkBehaviour, IDamageable
             GameManager.Instance.OnChaosPhase.RemoveListener(OnChaosPhaseStarted);
             GameManager.Instance.OnGameEnd.RemoveListener(OnGameEnded);
         }
+        base.OnDestroy();
     }
 
     void OnDrawGizmosSelected()

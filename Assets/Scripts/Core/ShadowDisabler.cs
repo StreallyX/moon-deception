@@ -24,7 +24,7 @@ public static class ShadowDisabler
 
     static void DisableAllLightShadows()
     {
-        Light[] allLights = Object.FindObjectsOfType<Light>();
+        Light[] allLights = Object.FindObjectsByType<Light>(FindObjectsSortMode.None);
         int count = 0;
         foreach (var light in allLights)
         {

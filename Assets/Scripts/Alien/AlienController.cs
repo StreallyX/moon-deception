@@ -148,7 +148,7 @@ public class AlienController : MonoBehaviour
 
         // 🔥 STEP 1: Disable ALL cameras and AudioListeners FIRST
         Debug.Log("[AlienController] Disabling all other cameras...");
-        Camera[] allCameras = FindObjectsOfType<Camera>(true);
+        Camera[] allCameras = FindObjectsByType<Camera>(FindObjectsInactive.Include, FindObjectsSortMode.None);
         foreach (Camera cam in allCameras)
         {
             if (cam.gameObject != gameObject && (alienCamera == null || cam != alienCamera))
@@ -158,7 +158,7 @@ public class AlienController : MonoBehaviour
             }
         }
 
-        AudioListener[] allListeners = FindObjectsOfType<AudioListener>(true);
+        AudioListener[] allListeners = FindObjectsByType<AudioListener>(FindObjectsInactive.Include, FindObjectsSortMode.None);
         foreach (var listener in allListeners)
         {
             listener.enabled = false;
@@ -259,7 +259,7 @@ public class AlienController : MonoBehaviour
         // Fallback: Look for a camera tagged or named for alien in scene
         if (alienCamera == null)
         {
-            Camera[] cameras = FindObjectsOfType<Camera>(true);
+            Camera[] cameras = FindObjectsByType<Camera>(FindObjectsInactive.Include, FindObjectsSortMode.None);
             Debug.Log($"[AlienController] Searching {cameras.Length} cameras in scene...");
             foreach (Camera cam in cameras)
             {
@@ -319,12 +319,10 @@ public class AlienController : MonoBehaviour
     
     void Update()
     {
+        // For remote players, NetworkAnimator handles animation sync
+        // We only need to update animations for the local controlled player
         if (!isControlled)
         {
-            if (showDebugLogs && Time.frameCount % 120 == 0)
-            {
-                Debug.Log("[AlienController] Update skipped - not controlled");
-            }
             return;
         }
 
@@ -353,14 +351,14 @@ public class AlienController : MonoBehaviour
             }
             Debug.Log($"[AlienController] Input: H={h}, V={v}, Pos={transform.position}, Camera=[{camStatus}]");
         }
-        
+
         // 3. Jump check FIRST (before gravity reset)
         if (Input.GetButtonDown("Jump") && characterController.isGrounded)
         {
             velocity.y = Mathf.Sqrt(jumpHeight * -2f * gravity);
             Debug.Log($"JUMP triggered! Pos={transform.position}, cameraTransform={(cameraTransform != null ? "OK" : "NULL")}, alienCamera={(alienCamera != null ? alienCamera.gameObject.name : "NULL")}");
         }
-        
+
         // 4. Gravity logic
         if (characterController.isGrounded && velocity.y < 0)
         {
@@ -370,7 +368,7 @@ public class AlienController : MonoBehaviour
         {
             velocity.y += gravity * Time.deltaTime;
         }
-        
+
         // 5. Check for sprint (Shift key)
         isRunning = Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
         moveSpeed = isRunning ? runSpeed : walkSpeed;
@@ -385,19 +383,19 @@ public class AlienController : MonoBehaviour
         // 7. ALWAYS apply vertical velocity
         characterController.Move(new Vector3(0, velocity.y, 0) * Time.deltaTime);
 
-        // 8. Update animation based on movement
+        // 8. Update animation based on movement (local player uses input)
         UpdateAnimation(move.magnitude > 0.1f ? moveSpeed : 0f);
 
         // 9. Update camera position
         UpdateCameraPosition();
-        
+
         // Debug logging
         if (showDebugLogs && Time.frameCount % 60 == 0)
         {
             //Debug.Log($"[Alien] isGrounded={characterController.isGrounded}, velocity.y={velocity.y:F2}, pos.y={transform.position.y:F2}");
         }
     }
-    
+
     /// <summary>
     /// ONLY mouse controls camera/character rotation.
     /// A/D keys do NOT affect rotation - only strafe movement.
@@ -440,9 +438,13 @@ public class AlienController : MonoBehaviour
     /// <summary>
     /// Update animation based on movement speed
     /// </summary>
+    private NetworkedPlayer networkedPlayer;
+
     private void UpdateAnimation(float currentSpeed)
     {
         if (animator == null) return;
+
+        bool isMoving = currentSpeed > 0.1f;
 
         // Set speed parameter for blend trees
         animator.SetFloat("Speed", currentSpeed);
@@ -452,7 +454,17 @@ public class AlienController : MonoBehaviour
         animator.speed = Mathf.Clamp(speedRatio, 0.5f, 2f);
 
         // Set IsMoving for animation transitions
-        animator.SetBool("IsMoving", currentSpeed > 0.1f);
+        animator.SetBool("IsMoving", isMoving);
+
+        // NETWORK SYNC: Send animation state to all other clients
+        if (networkedPlayer == null)
+        {
+            networkedPlayer = GetComponent<NetworkedPlayer>();
+        }
+        if (networkedPlayer != null)
+        {
+            networkedPlayer.SyncAnimationState(currentSpeed, isMoving);
+        }
     }
     
     public void EnableControl()
@@ -478,6 +490,9 @@ public class AlienController : MonoBehaviour
     void OnGUI()
     {
         if (!isControlled) return;
+
+        // Don't show UI if game ended
+        if (GameManager.Instance != null && GameManager.Instance.CurrentPhase == GameManager.GamePhase.Ended) return;
 
         // Sprint hint - bottom left
         GUIStyle hintStyle = new GUIStyle(GUI.skin.label);

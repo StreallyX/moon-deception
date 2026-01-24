@@ -225,6 +225,25 @@ public class BloodDecalManager : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// Clear all blood decals (call when starting a new game)
+    /// </summary>
+    public void ClearAllDecals()
+    {
+        Debug.Log($"[BloodDecalManager] Clearing {activeDecals.Count} blood decals");
+
+        // Return all active decals to pool
+        foreach (var decal in activeDecals)
+        {
+            if (decal != null && decal.gameObject != null)
+            {
+                decal.gameObject.SetActive(false);
+                decalPool.Enqueue(decal);
+            }
+        }
+        activeDecals.Clear();
+    }
+
     void OnDestroy()
     {
         if (Instance == this)

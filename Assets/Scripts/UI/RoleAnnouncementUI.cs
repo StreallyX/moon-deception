@@ -43,11 +43,11 @@ public class RoleAnnouncementUI : MonoBehaviour
 
     void Start()
     {
-        // Subscribe to NetworkGameManager
+        // Subscribe to NetworkGameManager for role announcements ONLY
+        // Game end UI is handled by MenuManager to avoid duplicate screens
         if (NetworkGameManager.Instance != null)
         {
             NetworkGameManager.Instance.OnLocalRoleAssigned += ShowRole;
-            NetworkGameManager.Instance.OnGameEnded += ShowGameEnd;
         }
         else
         {
@@ -65,7 +65,6 @@ public class RoleAnnouncementUI : MonoBehaviour
         if (NetworkGameManager.Instance != null)
         {
             NetworkGameManager.Instance.OnLocalRoleAssigned += ShowRole;
-            NetworkGameManager.Instance.OnGameEnded += ShowGameEnd;
         }
     }
 
@@ -74,7 +73,6 @@ public class RoleAnnouncementUI : MonoBehaviour
         if (NetworkGameManager.Instance != null)
         {
             NetworkGameManager.Instance.OnLocalRoleAssigned -= ShowRole;
-            NetworkGameManager.Instance.OnGameEnded -= ShowGameEnd;
         }
     }
 

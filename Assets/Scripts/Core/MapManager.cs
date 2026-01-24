@@ -252,7 +252,7 @@ public class MapManager : MonoBehaviour
     /// </summary>
     public void FindAllZonesInScene()
     {
-        MapZone[] zones = FindObjectsOfType<MapZone>(true); // true = include inactive
+        MapZone[] zones = FindObjectsByType<MapZone>(FindObjectsInactive.Include, FindObjectsSortMode.None); // true = include inactive
         Debug.Log($"[MapManager] Found {zones.Length} MapZone objects in scene");
 
         foreach (var zone in zones)

@@ -56,7 +56,7 @@ public class PlayerShooting : MonoBehaviour
     void Start()
     {
         // DEBUG: Check how many PlayerShooting scripts exist
-        var allShooters = FindObjectsOfType<PlayerShooting>();
+        var allShooters = FindObjectsByType<PlayerShooting>(FindObjectsSortMode.None);
         if (allShooters.Length > 1)
         {
             Debug.LogError($"[PlayerShooting] WARNING: {allShooters.Length} PlayerShooting scripts found! This will cause issues!");
@@ -568,6 +568,9 @@ public class PlayerShooting : MonoBehaviour
 
     void OnGUI()
     {
+        // Don't show UI if game ended
+        if (GameManager.Instance != null && GameManager.Instance.CurrentPhase == GameManager.GamePhase.Ended) return;
+
         // Hit marker
         if (showingHitMarker && hitMarkerTexture != null)
         {
@@ -671,7 +674,7 @@ public class PlayerShooting : MonoBehaviour
             }
         }
 
-        return FindObjectOfType<NetworkedPlayer>();
+        return FindFirstObjectByType<NetworkedPlayer>();
     }
 }
 

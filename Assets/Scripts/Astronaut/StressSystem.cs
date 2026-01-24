@@ -125,7 +125,7 @@ public class StressSystem : MonoBehaviour, IDamageable
                 stressSlider = GameObject.Find("StressBar")?.GetComponent<Slider>();
                 if (stressSlider == null)
                 {
-                    var sliders = FindObjectsOfType<Slider>();
+                    var sliders = FindObjectsByType<Slider>(FindObjectsSortMode.None);
                     foreach (var s in sliders)
                     {
                         if (s.name.ToLower().Contains("stress"))
@@ -344,5 +344,14 @@ public class StressSystem : MonoBehaviour, IDamageable
     public void TakeDamage(float amount)
     {
         AddStress(amount);
+    }
+
+    void OnDestroy()
+    {
+        // CRITICAL: Clear static instance to prevent stale references after scene reload
+        if (Instance == this)
+        {
+            Instance = null;
+        }
     }
 }

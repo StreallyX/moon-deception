@@ -1,4 +1,5 @@
 using UnityEngine;
+using Unity.Netcode;
 
 /// <summary>
 /// Coffee machine that aliens can use to restore hunger.
@@ -102,31 +103,57 @@ public class CoffeeMachine : Interactable
             return;
         }
 
-        // Find alien's hunger system
-        HungerSystem hunger = FindObjectOfType<HungerSystem>();
-        if (hunger != null)
+        // NETWORK: Use RPC to sync coffee drinking
+        var networkedPlayer = FindFirstObjectByType<NetworkedPlayer>();
+        if (networkedPlayer != null && NetworkManager.Singleton != null && NetworkManager.Singleton.IsConnectedClient)
         {
-            hunger.DrinkCoffee();
+            // RPC handles hunger effect and sound
+            networkedPlayer.DrinkCoffeeServerRpc(transform.position);
             MarkAsUsed();
 
-            Debug.Log($"[CoffeeMachine] Alien drank coffee! Decay: {hunger.DecayMultiplier:F1}x");
+            Debug.Log("[CoffeeMachine] Sent coffee RPC");
 
-            // Visual effects
+            // Visual effects (local feedback)
             PlayCoffeeEffects();
 
-            // Show feedback - benefit AND cost
-            if (GameUIManager.Instance != null)
+            // Show feedback
+            HungerSystem hunger = FindFirstObjectByType<HungerSystem>();
+            if (GameUIManager.Instance != null && hunger != null)
             {
                 string feedback = $"+25 Hunger! (Decay: {hunger.DecayMultiplier:F1}x)";
                 GameUIManager.Instance.ShowInteractionPrompt(feedback);
             }
 
-            // Hide prompt after short delay
             StartCoroutine(HidePromptDelayed());
         }
         else
         {
-            Debug.LogWarning("[CoffeeMachine] Could not find HungerSystem!");
+            // Single player fallback
+            HungerSystem hunger = FindFirstObjectByType<HungerSystem>();
+            if (hunger != null)
+            {
+                hunger.DrinkCoffee();
+                MarkAsUsed();
+
+                Debug.Log($"[CoffeeMachine] Alien drank coffee! Decay: {hunger.DecayMultiplier:F1}x");
+
+                // Visual effects
+                PlayCoffeeEffects();
+
+                // Show feedback - benefit AND cost
+                if (GameUIManager.Instance != null)
+                {
+                    string feedback = $"+25 Hunger! (Decay: {hunger.DecayMultiplier:F1}x)";
+                    GameUIManager.Instance.ShowInteractionPrompt(feedback);
+                }
+
+                // Hide prompt after short delay
+                StartCoroutine(HidePromptDelayed());
+            }
+            else
+            {
+                Debug.LogWarning("[CoffeeMachine] Could not find HungerSystem!");
+            }
         }
     }
 

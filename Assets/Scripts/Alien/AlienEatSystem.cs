@@ -44,7 +44,7 @@ public class AlienEatSystem : MonoBehaviour
         }
         if (eatPromptUI == null)
         {
-            eatPromptUI = FindObjectOfType<EatPromptUI>();
+            eatPromptUI = FindFirstObjectByType<EatPromptUI>();
         }
         
         if (eatPromptUI != null)
@@ -212,47 +212,63 @@ public class AlienEatSystem : MonoBehaviour
             Debug.LogWarning("[AlienEatSystem] EatTarget called with null target!");
             return;
         }
-        
+
         if (target == gameObject || target.transform.IsChildOf(transform) || target.transform.root == transform.root)
         {
             Debug.LogError("[AlienEatSystem] Attempted to eat self! Aborting.");
             return;
         }
-        
+
         Debug.Log($"[AlienEatSystem] Eating: {target.name}");
-        
+
         Vector3 targetPosition = target.transform.position;
         NPCBehavior npc = target.GetComponent<NPCBehavior>();
-        
-        if (hungerSystem != null)
+        NetworkObject netObj = target.GetComponent<NetworkObject>();
+        ulong npcNetworkId = (netObj != null && netObj.IsSpawned) ? netObj.NetworkObjectId : 0;
+
+        // NETWORK: Broadcast eating to all clients via RPC
+        var networkedPlayer = GetComponent<NetworkedPlayer>();
+        if (networkedPlayer != null && NetworkManager.Singleton != null && NetworkManager.Singleton.IsConnectedClient)
         {
-            hungerSystem.Eat();
-        }
-        
-        // Spawn blood decal (networked)
-        if (NetworkAudioManager.Instance != null)
-        {
-            NetworkAudioManager.Instance.SpawnBloodDecal(targetPosition);
-        }
-        else if (BloodDecalManager.Instance != null)
-        {
-            BloodDecalManager.Instance.SpawnBloodDecal(targetPosition);
-        }
-        else if (bloodDecalPrefab != null)
-        {
-            Instantiate(bloodDecalPrefab, targetPosition, Quaternion.identity);
+            // RPC handles: hunger restore, blood decal, kill feed, NPC despawn
+            networkedPlayer.AlienEatServerRpc(targetPosition, npcNetworkId);
+            Debug.Log($"[AlienEatSystem] Sent eat RPC for NPC {npcNetworkId}");
         }
         else
         {
-            CreateBloodPlaceholder(targetPosition);
+            // Single player fallback
+            if (hungerSystem != null)
+            {
+                hungerSystem.Eat();
+            }
+
+            // Spawn blood decal
+            if (BloodDecalManager.Instance != null)
+            {
+                BloodDecalManager.Instance.SpawnBloodDecal(targetPosition);
+            }
+            else if (bloodDecalPrefab != null)
+            {
+                Instantiate(bloodDecalPrefab, targetPosition, Quaternion.identity);
+            }
+            else
+            {
+                CreateBloodPlaceholder(targetPosition);
+            }
+
+            // Destroy target in single player
+            Destroy(target);
+            Debug.Log($"[AlienEatSystem] Destroyed non-networked: {target.name}");
         }
-        
+
         if (npc != null)
         {
-            GameManager gm = FindObjectOfType<GameManager>();
+            GameManager gm = FindFirstObjectByType<GameManager>();
             if (gm != null)
             {
-                gm.OnNPCKilled(npc);
+                // Use the new method that only adds stress if astronaut is nearby
+                // This prevents aliens from maxing stress by eating 5 NPCs quickly
+                gm.OnNPCEatenByAlien(npc, targetPosition);
             }
         }
 
@@ -262,40 +278,6 @@ public class AlienEatSystem : MonoBehaviour
         if (eatPromptUI != null)
         {
             eatPromptUI.SetVisible(false);
-        }
-
-        // Handle network destruction properly
-        NetworkObject netObj = target.GetComponent<NetworkObject>();
-        if (netObj != null && netObj.IsSpawned)
-        {
-            // NetworkObject - must be despawned by server
-            if (NetworkManager.Singleton != null && NetworkManager.Singleton.IsServer)
-            {
-                // We are server - despawn immediately
-                netObj.Despawn();
-                Debug.Log($"[AlienEatSystem] Server despawned NetworkObject: {target.name}");
-            }
-            else if (NetworkManager.Singleton != null)
-            {
-                // We are client - request server to despawn via NPCBehavior
-                NPCBehavior npcBehavior = target.GetComponent<NPCBehavior>();
-                if (npcBehavior != null)
-                {
-                    // Use the damage system to kill the NPC (server-authoritative)
-                    npcBehavior.TakeDamage(9999f);
-                    Debug.Log($"[AlienEatSystem] Client requested server to kill: {target.name}");
-                }
-                else
-                {
-                    Debug.LogWarning($"[AlienEatSystem] Cannot despawn {target.name} - no NPCBehavior and not server");
-                }
-            }
-        }
-        else
-        {
-            // Not a NetworkObject or not spawned - regular destroy (single player)
-            Destroy(target);
-            Debug.Log($"[AlienEatSystem] Destroyed non-networked: {target.name}");
         }
     }
     
@@ -321,6 +303,9 @@ public class AlienEatSystem : MonoBehaviour
         // Only show when alien is controlled and has a valid target
         if (!AlienController.IsAlienControlled) return;
         if (currentTarget == null) return;
+
+        // Don't show UI if game ended
+        if (GameManager.Instance != null && GameManager.Instance.CurrentPhase == GameManager.GamePhase.Ended) return;
 
         // Create styles for the eat prompt
         GUIStyle promptStyle = new GUIStyle(GUI.skin.label);

@@ -22,6 +22,10 @@ public class SteamLobbyManager : MonoBehaviour
     public bool InLobby => CurrentLobbyID.IsValid();
     public bool IsHost { get; private set; } = false;
 
+    // Game transition state - prevents double loading
+    private bool isTransitioningToGame = false;
+    public bool IsInGame { get; private set; } = false;
+
     // Player list
     public List<LobbyPlayer> Players { get; private set; } = new List<LobbyPlayer>();
 
@@ -90,6 +94,23 @@ public class SteamLobbyManager : MonoBehaviour
         Debug.Log("[SteamLobby] Initialized");
     }
 
+    void Update()
+    {
+        // Periodic check for clients who might have missed the callback
+        // Only check if in lobby, not host, and not already transitioning
+        if (InLobby && !IsHost && !isTransitioningToGame && !IsInGame)
+        {
+            string gameStarted = SteamMatchmaking.GetLobbyData(CurrentLobbyID, "gameStarted");
+            if (gameStarted == "1")
+            {
+                Debug.Log("[SteamLobby] Update detected game started (callback might have been missed)!");
+                isTransitioningToGame = true;
+                OnGameStarting?.Invoke();
+                StartCoroutine(LoadGameAndStartNetwork(false));
+            }
+        }
+    }
+
     // ==================== PUBLIC METHODS ====================
 
     /// <summary>
@@ -146,6 +167,10 @@ public class SteamLobbyManager : MonoBehaviour
         IsHost = false;
         Players.Clear();
 
+        // Reset game state flags
+        isTransitioningToGame = false;
+        IsInGame = false;
+
         OnLobbyLeft?.Invoke();
     }
 
@@ -154,9 +179,13 @@ public class SteamLobbyManager : MonoBehaviour
     /// </summary>
     public void ResetGameState()
     {
-        if (!InLobby) return;
-
         Debug.Log("[SteamLobby] Resetting game state for new game");
+
+        // Reset transition flags
+        isTransitioningToGame = false;
+        IsInGame = false;
+
+        if (!InLobby) return;
 
         // Reset game started flag
         if (IsHost)
@@ -236,7 +265,14 @@ public class SteamLobbyManager : MonoBehaviour
             return;
         }
 
+        if (isTransitioningToGame || IsInGame)
+        {
+            Debug.LogWarning("[SteamLobby] Already transitioning to game or in game!");
+            return;
+        }
+
         Debug.Log("[SteamLobby] Starting game!");
+        isTransitioningToGame = true;
 
         // Set lobby data to signal game start
         SteamMatchmaking.SetLobbyData(CurrentLobbyID, "gameStarted", "1");
@@ -248,14 +284,34 @@ public class SteamLobbyManager : MonoBehaviour
 
     IEnumerator LoadGameAndStartNetwork(bool asHost)
     {
+        // Double-check we're not already in game
+        if (IsInGame)
+        {
+            Debug.LogWarning("[SteamLobby] Already in game, aborting LoadGameAndStartNetwork");
+            isTransitioningToGame = false;
+            yield break;
+        }
+
+        // Safety timeout - reset flags if transition takes too long
+        float transitionStartTime = Time.realtimeSinceStartup;
+        float maxTransitionTime = 30f; // 30 seconds max to transition
+
         // Load game scene
-        Debug.Log($"[SteamLobby] Loading scene: {gameSceneName}...");
+        Debug.Log($"[SteamLobby] Loading scene: {gameSceneName}... (asHost={asHost})");
         AsyncOperation asyncLoad = SceneManager.LoadSceneAsync(gameSceneName);
         while (!asyncLoad.isDone)
         {
+            // Safety timeout check
+            if (Time.realtimeSinceStartup - transitionStartTime > maxTransitionTime)
+            {
+                Debug.LogError("[SteamLobby] Scene load timeout! Resetting transition state.");
+                isTransitioningToGame = false;
+                yield break;
+            }
             yield return null;
         }
 
+        IsInGame = true;
         Debug.Log("[SteamLobby] Scene loaded, waiting for initialization...");
 
         // Wait for scene to fully initialize (managers, zones, etc.)
@@ -381,6 +437,9 @@ public class SteamLobbyManager : MonoBehaviour
             if (!hostSteamID.IsValid())
             {
                 Debug.LogError("[SteamLobby] No valid host SteamID found in lobby data after 10s! Cannot connect via Steam Relay.");
+                isTransitioningToGame = false;
+                IsInGame = false;
+                OnError?.Invoke("Failed to connect: Host not found");
                 yield break;
             }
 
@@ -413,8 +472,14 @@ public class SteamLobbyManager : MonoBehaviour
             else
             {
                 Debug.LogError("[SteamLobby] CLIENT failed to connect via Steam Relay!");
+                isTransitioningToGame = false;
+                IsInGame = false;
+                OnError?.Invoke("Failed to connect to host");
             }
         }
+
+        // Mark transition as complete
+        isTransitioningToGame = false;
     }
 
     /// <summary>
@@ -591,9 +656,10 @@ public class SteamLobbyManager : MonoBehaviour
 
         // Check if game started
         string gameStarted = SteamMatchmaking.GetLobbyData(CurrentLobbyID, "gameStarted");
-        if (gameStarted == "1" && !IsHost)
+        if (gameStarted == "1" && !IsHost && !isTransitioningToGame && !IsInGame)
         {
-            Debug.Log("[SteamLobby] Host started the game!");
+            Debug.Log("[SteamLobby] Host started the game! Transitioning...");
+            isTransitioningToGame = true;
             OnGameStarting?.Invoke();
             StartCoroutine(LoadGameAndStartNetwork(false)); // Start as client
             return;
@@ -683,6 +749,16 @@ public class SteamLobbyManager : MonoBehaviour
 
     void OnDestroy()
     {
+        // CRITICAL: Clear static instance to prevent stale references after scene reload
+        if (Instance == this)
+        {
+            Instance = null;
+        }
+
+        // Reset state flags to prevent blocking future sessions
+        isTransitioningToGame = false;
+        IsInGame = false;
+
         // Only leave lobby if Steam is still initialized
         if (InLobby && SteamManager.Initialized)
         {

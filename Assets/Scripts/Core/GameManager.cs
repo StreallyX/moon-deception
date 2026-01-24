@@ -40,6 +40,13 @@ public class GameManager : MonoBehaviour
     [SerializeField] private int aliensRemaining;
     [SerializeField] private int innocentsKilled;
 
+    [Header("Alien Eating Balance")]
+    [SerializeField] private float alienEatWitnessRange = 20f; // Full stress if astronaut is within this range
+    [SerializeField] private float alienEatStressNearby = 3f; // Stress when astronaut is nearby (within witnessRange)
+    [SerializeField] private float alienEatStressFar = 1f; // Small stress even when astronaut is far (always added)
+    [SerializeField] private float alienEatStressCooldown = 1f; // Short cooldown to prevent rapid spam
+    private float lastAlienEatStressTime = -999f;
+
     [Header("Events")]
     public UnityEvent OnGameStart;
     public UnityEvent OnChaosPhase;
@@ -56,6 +63,8 @@ public class GameManager : MonoBehaviour
     public float TimeRemaining => gameDuration - gameTimer;
     public int AliensRemaining => aliensRemaining;
     public int InnocentsKilled => innocentsKilled;
+    public bool IsAstronautAlive => isAstronautAlive;
+    public int TotalNPCs => totalNPCs;
 
     public static GameManager Instance { get; private set; }
 
@@ -94,11 +103,27 @@ public class GameManager : MonoBehaviour
         Debug.Log("[GameManager] Waiting for GameLoader or NetworkSpawnManager to start game...");
     }
 
+    void OnDestroy()
+    {
+        // CRITICAL: Clear static instance to prevent stale references after scene reload
+        if (Instance == this)
+        {
+            Instance = null;
+            Debug.Log("[GameManager] Instance cleared on destroy");
+        }
+
+        // Unsubscribe from stress system events
+        if (astronautStress != null)
+        {
+            astronautStress.OnStressMaxed.RemoveListener(TriggerChaosPhase);
+        }
+    }
+
     void SubscribeToStressSystem()
     {
         if (astronautStress == null)
         {
-            astronautStress = FindObjectOfType<StressSystem>();
+            astronautStress = FindFirstObjectByType<StressSystem>();
         }
 
         if (astronautStress != null)
@@ -138,10 +163,22 @@ public class GameManager : MonoBehaviour
     /// </summary>
     public void StartGame()
     {
+        Debug.Log("[GameManager] === STARTING NEW GAME ===");
+
+        // Reset all state from previous game
+        ResetGameState();
+
         currentPhase = GamePhase.Starting;
         gameTimer = 0f;
         innocentsKilled = 0;
         aliensRemaining = 0;
+
+        // Clear blood decals from previous game
+        if (BloodDecalManager.Instance != null)
+        {
+            BloodDecalManager.Instance.ClearAllDecals();
+            Debug.Log("[GameManager] Cleared blood decals");
+        }
 
         // Use SpawnManager to set up entities (aliens, defense zones, interactables)
         if (SpawnManager.Instance != null)
@@ -153,8 +190,8 @@ public class GameManager : MonoBehaviour
         }
 
         // Find all NPCs and aliens in scene
-        activeNPCs.AddRange(FindObjectsOfType<NPCBehavior>());
-        activeAliens.AddRange(FindObjectsOfType<AlienController>());
+        activeNPCs.AddRange(FindObjectsByType<NPCBehavior>(FindObjectsSortMode.None));
+        activeAliens.AddRange(FindObjectsByType<AlienController>(FindObjectsSortMode.None));
 
         // Count aliens assigned to NPCs
         int alienNPCCount = 0;
@@ -170,7 +207,7 @@ public class GameManager : MonoBehaviour
         // Find astronaut stress system if not assigned
         if (astronautStress == null)
         {
-            astronautStress = FindObjectOfType<StressSystem>();
+            astronautStress = FindFirstObjectByType<StressSystem>();
         }
 
         Debug.Log($"[GameManager] Game starting! NPCs: {activeNPCs.Count}, Aliens: {aliensRemaining}");
@@ -233,6 +270,70 @@ public class GameManager : MonoBehaviour
             }
 
             Debug.Log($"[GameManager] Innocent killed! Total: {innocentsKilled}");
+        }
+
+        activeNPCs.Remove(npc);
+    }
+
+    /// <summary>
+    /// Called when an alien EATS an NPC (not when astronaut kills one).
+    /// Stress is only added if astronaut is nearby (can witness), and with a cooldown.
+    /// </summary>
+    public void OnNPCEatenByAlien(NPCBehavior npc, Vector3 eatPosition)
+    {
+        if (npc == null) return;
+
+        // Count the kill but DON'T add stress like innocent kill
+        if (npc.IsAlien)
+        {
+            // Alien ate another alien (rare case)
+            aliensRemaining--;
+            OnAlienKilled?.Invoke(aliensRemaining);
+            Debug.Log($"[GameManager] Alien eaten by alien! {aliensRemaining} remaining.");
+
+            if (aliensRemaining <= 0)
+            {
+                EndGame(WinCondition.AstronautWins);
+            }
+        }
+        else
+        {
+            // Alien ate innocent - always add some stress, more if astronaut is nearby
+            innocentsKilled++;
+            OnInnocentKilled?.Invoke(innocentsKilled);
+
+            StressSystem stress = astronautStress ?? StressSystem.Instance;
+            if (stress != null && Time.time - lastAlienEatStressTime >= alienEatStressCooldown)
+            {
+                float distance = Vector3.Distance(stress.transform.position, eatPosition);
+                float stressToAdd;
+
+                if (distance <= alienEatWitnessRange)
+                {
+                    // Nearby - add more stress
+                    stressToAdd = alienEatStressNearby;
+                    Debug.Log($"[GameManager] Astronaut nearby ({distance:F1}m) - adding {stressToAdd} stress");
+                }
+                else
+                {
+                    // Far away - still add small amount (alien is killing people, tension rises)
+                    stressToAdd = alienEatStressFar;
+                    Debug.Log($"[GameManager] Astronaut far ({distance:F1}m) - adding {stressToAdd} stress");
+                }
+
+                stress.AddStress(stressToAdd);
+                lastAlienEatStressTime = Time.time;
+            }
+            else if (stress == null)
+            {
+                Debug.LogWarning("[GameManager] StressSystem not found when alien ate NPC");
+            }
+            else
+            {
+                Debug.Log("[GameManager] Alien ate NPC but stress on cooldown");
+            }
+
+            Debug.Log($"[GameManager] NPC eaten by alien. Total innocents killed: {innocentsKilled}");
         }
 
         activeNPCs.Remove(npc);
@@ -354,7 +455,7 @@ public class GameManager : MonoBehaviour
         else
         {
             // Fallback - manually turn off lights
-            Light[] lights = FindObjectsOfType<Light>();
+            Light[] lights = FindObjectsByType<Light>(FindObjectsSortMode.None);
             foreach (var light in lights)
             {
                 if (light.type != LightType.Directional) // Keep directional for minimal visibility
@@ -377,6 +478,12 @@ public class GameManager : MonoBehaviour
         Debug.Log($"[GameManager] Game Over! Winner: {winner}");
 
         OnGameEnd?.Invoke(winner);
+
+        // Hide all gameplay UI first (stress bar, hunger bar, etc.)
+        if (GameUIManager.Instance != null)
+        {
+            GameUIManager.Instance.OnGameEnded();
+        }
 
         // Show game over screen
         if (MenuManager.Instance != null)
@@ -417,17 +524,53 @@ public class GameManager : MonoBehaviour
     /// </summary>
     public void ResetGame()
     {
+        ResetGameState();
+    }
+
+    /// <summary>
+    /// Reset all game state for a new game. Called at the start of each game.
+    /// </summary>
+    private void ResetGameState()
+    {
+        Debug.Log("[GameManager] Resetting all game state...");
+
         currentPhase = GamePhase.Lobby;
         gameTimer = 0f;
         innocentsKilled = 0;
         aliensRemaining = 0;
         isAstronautAlive = true;
+        lastAlienEatStressTime = -999f;
+
         activeAliens.Clear();
         activeNPCs.Clear();
 
+        // Reset stress system
         if (astronautStress != null)
         {
             astronautStress.ResetStress();
         }
+        else
+        {
+            // Try to find it
+            var stress = FindFirstObjectByType<StressSystem>();
+            if (stress != null)
+            {
+                stress.ResetStress();
+            }
+        }
+
+        // Clear blood decals
+        if (BloodDecalManager.Instance != null)
+        {
+            BloodDecalManager.Instance.ClearAllDecals();
+        }
+
+        // Reset chaos lighting if active
+        if (ChaosLightingController.Instance != null)
+        {
+            ChaosLightingController.Instance.ResetLighting();
+        }
+
+        Debug.Log("[GameManager] Game state reset complete");
     }
 }

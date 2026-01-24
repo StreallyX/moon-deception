@@ -1,5 +1,6 @@
 using UnityEngine;
 using System.Collections;
+using Unity.Netcode;
 
 /// <summary>
 /// Alien chaos abilities to stress the astronaut.
@@ -18,25 +19,25 @@ public class AlienAbilities : MonoBehaviour
     public float collisionCooldown = 5f;
     public float glitchCooldown = 8f;
     public float soundCooldown = 6f;
-    public float windCooldown = 10f;
+    public float teleportCooldown = 12f;
 
     [Header("Effect Ranges")]
     public float collisionRange = 3f;
     public float glitchRange = 15f;
     public float soundRange = 20f;
-    public float windRange = 8f;
+    public float teleportRange = 15f; // Range to find NPCs to swap with
 
     [Header("Stress Values")]
     public float collisionStress = 5f;
     public float glitchStress = 8f;
     public float soundStress = 6f;
-    public float windStress = 10f;
+    public float teleportStress = 4f;
 
     // Cooldown timers
     private float collisionTimer = 0f;
     private float glitchTimer = 0f;
     private float soundTimer = 0f;
-    private float windTimer = 0f;
+    private float teleportTimer = 0f;
 
     // References
     private AlienController alienController;
@@ -45,12 +46,12 @@ public class AlienAbilities : MonoBehaviour
     public float Ability1Cooldown => Mathf.Max(0, collisionTimer);
     public float Ability2Cooldown => Mathf.Max(0, glitchTimer);
     public float Ability3Cooldown => Mathf.Max(0, soundTimer);
-    public float Ability4Cooldown => Mathf.Max(0, windTimer);
+    public float Ability4Cooldown => Mathf.Max(0, teleportTimer);
 
     public bool CanUseAbility1 => collisionTimer <= 0;
     public bool CanUseAbility2 => glitchTimer <= 0;
     public bool CanUseAbility3 => soundTimer <= 0;
-    public bool CanUseAbility4 => windTimer <= 0;
+    public bool CanUseAbility4 => teleportTimer <= 0;
 
     void Start()
     {
@@ -75,7 +76,7 @@ public class AlienAbilities : MonoBehaviour
         if (collisionTimer > 0) collisionTimer -= Time.deltaTime;
         if (glitchTimer > 0) glitchTimer -= Time.deltaTime;
         if (soundTimer > 0) soundTimer -= Time.deltaTime;
-        if (windTimer > 0) windTimer -= Time.deltaTime;
+        if (teleportTimer > 0) teleportTimer -= Time.deltaTime;
 
         // Check if we can use abilities (only during search phase)
         if (!CanUseAbilities()) return;
@@ -95,7 +96,7 @@ public class AlienAbilities : MonoBehaviour
         }
         if (Input.GetKeyDown(ability4Key) && CanUseAbility4)
         {
-            UseWind();
+            UseTeleport();
         }
     }
 
@@ -166,6 +167,7 @@ public class AlienAbilities : MonoBehaviour
         // Find nearby NPCs and make them react
         Collider[] hits = Physics.OverlapSphere(transform.position, collisionRange);
         int affectedCount = 0;
+        bool isNetworked = NetworkManager.Singleton != null && NetworkManager.Singleton.IsConnectedClient;
 
         foreach (var hit in hits)
         {
@@ -173,12 +175,19 @@ public class AlienAbilities : MonoBehaviour
             if (npc == null) npc = hit.GetComponentInParent<NPCBehavior>();
             if (npc != null && npc.gameObject != gameObject)
             {
-                // Push NPC slightly
+                // Push NPC slightly (local visual feedback - server will validate via NPC's NetworkTransform)
                 Vector3 pushDir = (npc.transform.position - transform.position).normalized;
                 npc.transform.position += pushDir * 0.5f;
 
-                // Make NPC stumble/react
-                npc.Panic();
+                // Make NPC panic - use RPC if networked
+                if (isNetworked && npc.IsSpawned)
+                {
+                    npc.PanicServerRpc();
+                }
+                else
+                {
+                    npc.Panic();
+                }
                 affectedCount++;
             }
         }
@@ -250,6 +259,7 @@ public class AlienAbilities : MonoBehaviour
         }
 
         // Make nearby NPCs look around nervously and some panic
+        bool isNetworked = NetworkManager.Singleton != null && NetworkManager.Singleton.IsConnectedClient;
         Collider[] hits = Physics.OverlapSphere(soundPos, 8f);
         foreach (var hit in hits)
         {
@@ -260,10 +270,17 @@ public class AlienAbilities : MonoBehaviour
                 // NPC heard something - look towards sound
                 npc.transform.LookAt(new Vector3(soundPos.x, npc.transform.position.y, soundPos.z));
 
-                // 30% chance to panic
+                // 30% chance to panic - use RPC if networked
                 if (Random.value < 0.3f)
                 {
-                    npc.Panic();
+                    if (isNetworked && npc.IsSpawned)
+                    {
+                        npc.PanicServerRpc();
+                    }
+                    else
+                    {
+                        npc.Panic();
+                    }
                 }
             }
         }
@@ -271,48 +288,167 @@ public class AlienAbilities : MonoBehaviour
         Debug.Log($"[AlienAbilities] Sound ability used at {soundPos}");
     }
 
-    // ==================== ABILITY 4: WIND ====================
-    void UseWind()
+    // ==================== ABILITY 4: TELEPORT ====================
+    void UseTeleport()
     {
-        windTimer = windCooldown;
-        Debug.Log("[AlienAbilities] WIND - Environmental disturbance!");
+        // Find a nearby NPC to swap with
+        NPCBehavior targetNPC = FindNPCToSwapWith();
 
-        // Apply stress (highest value)
-        ApplyStressToAstronaut(windRange, windStress);
+        if (targetNPC == null)
+        {
+            Debug.Log("[AlienAbilities] TELEPORT - No NPC found nearby to swap with!");
+            // Don't consume cooldown if no target found
+            return;
+        }
 
-        // Play networked effects (everyone sees particles and light flicker)
+        teleportTimer = teleportCooldown;
+        Debug.Log($"[AlienAbilities] TELEPORT - Swapping with {targetNPC.name}!");
+
+        // Store positions
+        Vector3 alienPos = transform.position;
+        Vector3 npcPos = targetNPC.transform.position;
+        Quaternion alienRot = transform.rotation;
+        Quaternion npcRot = targetNPC.transform.rotation;
+
+        // Play teleport effects at BOTH positions (networked - everyone sees particles)
         if (NetworkAudioManager.Instance != null)
         {
-            NetworkAudioManager.Instance.UseWindAbility(transform.position);
+            NetworkAudioManager.Instance.UseTeleportAbility(alienPos, npcPos);
         }
-        else if (AudioManager.Instance != null)
+        else
         {
-            AudioManager.Instance.PlayPowerDown();
+            // Local fallback - create particle effects
+            CreateTeleportEffect(alienPos);
+            CreateTeleportEffect(npcPos);
+            AudioManager.Instance?.PlayPowerDown();
         }
 
-        // Affect all NPCs in range - make them stumble and panic
-        Collider[] hits = Physics.OverlapSphere(transform.position, windRange);
-        int affectedCount = 0;
+        // NETWORK: Sync position via RPC if in multiplayer
+        var networkedPlayer = GetComponent<NetworkedPlayer>();
+        if (networkedPlayer != null && NetworkManager.Singleton != null && NetworkManager.Singleton.IsConnectedClient)
+        {
+            // Get NPC's NetworkObject ID for server to find it
+            var npcNetObj = targetNPC.GetComponent<NetworkObject>();
+            ulong npcNetworkId = npcNetObj != null ? npcNetObj.NetworkObjectId : 0;
+
+            // Send teleport to server - server will sync positions
+            networkedPlayer.TeleportSwapServerRpc(npcPos, npcRot, npcNetworkId);
+            Debug.Log($"[AlienAbilities] Sent TeleportSwapServerRpc to position {npcPos}");
+        }
+        else
+        {
+            // Single player fallback - local teleport
+            PerformLocalTeleport(npcPos, npcRot, targetNPC, alienPos, alienRot);
+        }
+
+        // Apply small stress to astronaut (they might notice something weird)
+        ApplyStressToAstronaut(teleportRange * 2f, teleportStress);
+
+        // Make the swapped NPC act confused (use RPC if available)
+        if (targetNPC.IsSpawned && NetworkManager.Singleton != null)
+        {
+            targetNPC.PanicServerRpc();
+        }
+        else
+        {
+            targetNPC.Panic();
+        }
+
+        Debug.Log($"[AlienAbilities] Teleported from {alienPos} to {npcPos}");
+    }
+
+    /// <summary>
+    /// Perform local teleport (single player or called after network sync)
+    /// </summary>
+    public void PerformLocalTeleport(Vector3 newPos, Quaternion newRot, NPCBehavior targetNPC, Vector3 oldAlienPos, Quaternion oldAlienRot)
+    {
+        // Disable CharacterController temporarily for teleport
+        var charController = GetComponent<CharacterController>();
+        bool wasEnabled = charController != null && charController.enabled;
+        if (charController != null) charController.enabled = false;
+
+        // Swap positions!
+        transform.position = newPos + Vector3.up * 0.1f; // Slight offset to avoid ground clipping
+        if (targetNPC != null)
+        {
+            targetNPC.transform.position = oldAlienPos;
+            targetNPC.transform.rotation = oldAlienRot;
+        }
+
+        // Optionally swap rotations too (makes it more confusing)
+        transform.rotation = newRot;
+
+        // Re-enable CharacterController
+        if (charController != null) charController.enabled = wasEnabled;
+    }
+
+    /// <summary>
+    /// Find a random NPC within range to swap positions with
+    /// </summary>
+    NPCBehavior FindNPCToSwapWith()
+    {
+        Collider[] hits = Physics.OverlapSphere(transform.position, teleportRange);
+        System.Collections.Generic.List<NPCBehavior> validNPCs = new System.Collections.Generic.List<NPCBehavior>();
+
         foreach (var hit in hits)
         {
             NPCBehavior npc = hit.GetComponent<NPCBehavior>();
             if (npc == null) npc = hit.GetComponentInParent<NPCBehavior>();
-            if (npc != null && npc.gameObject != gameObject)
-            {
-                // Random push direction
-                Vector3 pushDir = new Vector3(Random.Range(-1f, 1f), 0, Random.Range(-1f, 1f)).normalized;
-                npc.transform.position += pushDir * 0.3f;
 
-                // 50% chance to panic
-                if (Random.value < 0.5f)
+            if (npc != null && npc.gameObject != gameObject && !npc.IsDead)
+            {
+                // Check NPC is not too close (would be obvious) or too far
+                float dist = Vector3.Distance(transform.position, npc.transform.position);
+                if (dist > 3f) // At least 3m away for meaningful teleport
                 {
-                    npc.Panic();
+                    validNPCs.Add(npc);
                 }
-                affectedCount++;
             }
         }
 
-        Debug.Log($"[AlienAbilities] Wind affected {affectedCount} NPCs");
+        if (validNPCs.Count == 0) return null;
+
+        // Pick a random NPC from the valid list
+        return validNPCs[Random.Range(0, validNPCs.Count)];
+    }
+
+    /// <summary>
+    /// Create local teleport particle effect
+    /// </summary>
+    void CreateTeleportEffect(Vector3 position)
+    {
+        GameObject fx = new GameObject("TeleportEffect");
+        fx.transform.position = position + Vector3.up;
+
+        var ps = fx.AddComponent<ParticleSystem>();
+        ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+
+        var main = ps.main;
+        main.duration = 0.5f;
+        main.loop = false;
+        main.startLifetime = 0.8f;
+        main.startSpeed = 5f;
+        main.startSize = 0.3f;
+        main.startColor = new Color(0.5f, 0f, 1f, 0.9f); // Purple particles
+        main.maxParticles = 50;
+        main.gravityModifier = -0.5f; // Float upward
+
+        var emission = ps.emission;
+        emission.rateOverTime = 0;
+        emission.SetBursts(new ParticleSystem.Burst[] { new ParticleSystem.Burst(0f, 40) });
+
+        var shape = ps.shape;
+        shape.shapeType = ParticleSystemShapeType.Sphere;
+        shape.radius = 0.5f;
+
+        var renderer = fx.GetComponent<ParticleSystemRenderer>();
+        // Use a safe material
+        Shader shader = Shader.Find("Particles/Standard Unlit");
+        if (shader == null) shader = Shader.Find("Sprites/Default");
+        if (shader != null) renderer.material = new Material(shader);
+
+        ps.Play();
+        Destroy(fx, 2f);
     }
 
     // ==================== HELPER ====================
@@ -330,7 +466,7 @@ public class AlienAbilities : MonoBehaviour
         else
         {
             // Try to find via PlayerMovement
-            var player = FindObjectOfType<PlayerMovement>();
+            var player = FindFirstObjectByType<PlayerMovement>();
             if (player != null)
             {
                 astronautPos = player.transform.position;
@@ -401,6 +537,9 @@ public class AlienAbilities : MonoBehaviour
         // CRITICAL: Check if this component is enabled (means we're the local alien player)
         if (!enabled) return;
 
+        // Don't show UI if game ended
+        if (GameManager.Instance != null && GameManager.Instance.CurrentPhase == GameManager.GamePhase.Ended) return;
+
         // Create textures if needed
         CreateUITextures();
 
@@ -452,7 +591,7 @@ public class AlienAbilities : MonoBehaviour
         DrawAbilityWithBar(x, lineY, "3", "SON", CanUseAbility3, soundTimer, soundCooldown, new Color(1f, 0.9f, 0.3f));
         lineY += lineHeight;
 
-        DrawAbilityWithBar(x, lineY, "4", "VENT", CanUseAbility4, windTimer, windCooldown, new Color(0.5f, 1f, 0.5f));
+        DrawAbilityWithBar(x, lineY, "4", "TELEPORT", CanUseAbility4, teleportTimer, teleportCooldown, new Color(0.7f, 0.3f, 1f));
     }
 
     void DrawAbilityWithBar(float x, float y, string key, string name, bool ready, float timer, float maxCooldown, Color abilityColor)

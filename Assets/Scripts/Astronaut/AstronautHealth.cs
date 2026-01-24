@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.Events;
+using Unity.Netcode;
 
 /// <summary>
 /// Health system for the astronaut.
@@ -114,10 +115,22 @@ public class AstronautHealth : MonoBehaviour, IDamageable
 
         OnDeath?.Invoke();
 
-        // Notify game manager (networked)
-        if (GameManager.Instance != null)
+        // NETWORK: Notify server about death via RPC
+        // Server will handle game end and broadcast
+        var networkedPlayer = GetComponent<NetworkedPlayer>();
+        if (networkedPlayer != null && Unity.Netcode.NetworkManager.Singleton != null)
         {
-            GameManager.Instance.EndGameNetworked(GameManager.WinCondition.AliensWin);
+            // Use the networked death RPC
+            networkedPlayer.AstronautDiedServerRpc();
+            Debug.Log("[AstronautHealth] Sent AstronautDiedServerRpc");
+        }
+        else
+        {
+            // Single player fallback
+            if (GameManager.Instance != null)
+            {
+                GameManager.Instance.EndGame(GameManager.WinCondition.AliensWin);
+            }
         }
 
         // Disable player controls
@@ -166,6 +179,9 @@ public class AstronautHealth : MonoBehaviour, IDamageable
 
     void OnGUI()
     {
+        // Don't show UI if game ended
+        if (GameManager.Instance != null && GameManager.Instance.CurrentPhase == GameManager.GamePhase.Ended) return;
+
         // Health warning when low
         if (currentHealth < maxHealth * 0.3f && !isDead)
         {
@@ -175,6 +191,15 @@ public class AstronautHealth : MonoBehaviour, IDamageable
             style.normal.textColor = new Color(1f, 0.2f, 0.2f, Mathf.PingPong(Time.time * 3f, 1f));
 
             GUI.Label(new Rect(Screen.width / 2 - 80, Screen.height - 80, 160, 30), "LOW HEALTH!", style);
+        }
+    }
+
+    void OnDestroy()
+    {
+        // CRITICAL: Clear static instance to prevent stale references after scene reload
+        if (Instance == this)
+        {
+            Instance = null;
         }
     }
 }

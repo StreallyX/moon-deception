@@ -112,7 +112,7 @@ public class SimpleNetworkTest : MonoBehaviour
         // Also prepare NetworkSpawnManager reference
         if (networkSpawnManager == null)
         {
-            networkSpawnManager = FindObjectOfType<NetworkSpawnManager>();
+            networkSpawnManager = FindFirstObjectByType<NetworkSpawnManager>();
         }
     }
 
@@ -335,6 +335,18 @@ public class SimpleNetworkTest : MonoBehaviour
 
     void OnGUI()
     {
+        // Hide debug UI during gameplay - only show in lobby/menu
+        if (GameManager.Instance != null)
+        {
+            var phase = GameManager.Instance.CurrentPhase;
+            if (phase == GameManager.GamePhase.Playing ||
+                phase == GameManager.GamePhase.Chaos ||
+                phase == GameManager.GamePhase.Ended)
+            {
+                return; // Don't show debug UI during game
+            }
+        }
+
         GUIStyle style = new GUIStyle(GUI.skin.label);
         style.fontSize = 18;
         style.normal.textColor = Color.white;

@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.Events;
+using Unity.Netcode;
 
 /// <summary>
 /// Health system for the alien player.
@@ -116,13 +117,6 @@ public class AlienHealth : MonoBehaviour, IDamageable
 
         OnDeath?.Invoke();
 
-        // Reduce astronaut stress
-        if (StressSystem.Instance != null)
-        {
-            StressSystem.Instance.ReduceStress(stressReductionOnKill);
-            Debug.Log($"[AlienHealth] Astronaut stress reduced by {stressReductionOnKill}");
-        }
-
         // Play death sound (networked)
         if (NetworkAudioManager.Instance != null)
         {
@@ -133,25 +127,43 @@ public class AlienHealth : MonoBehaviour, IDamageable
             AudioManager.Instance.PlayAlienKilled();
         }
 
-        // Check if all aliens are dead - astronaut wins!
-        // Count remaining alive aliens
-        int aliveAliens = 0;
-        AlienHealth[] allAliens = FindObjectsOfType<AlienHealth>();
-        foreach (var alien in allAliens)
+        // NETWORK: Notify server about death via RPC
+        // Server will handle stress reduction, win condition check, and broadcast
+        var networkedPlayer = GetComponent<NetworkedPlayer>();
+        bool isNetworked = networkedPlayer != null &&
+                           Unity.Netcode.NetworkManager.Singleton != null &&
+                           Unity.Netcode.NetworkManager.Singleton.IsConnectedClient;
+
+        if (isNetworked)
         {
-            if (!alien.IsDead)
-            {
-                aliveAliens++;
-            }
+            // Use the networked death RPC
+            ulong clientId = networkedPlayer.OwnerClientId;
+            networkedPlayer.AlienDiedServerRpc(clientId);
+            Debug.Log($"[AlienHealth] Sent AlienDiedServerRpc for client {clientId}");
         }
-
-        Debug.Log($"[AlienHealth] Remaining aliens: {aliveAliens}");
-
-        // If no aliens left, astronaut wins!
-        if (aliveAliens == 0 && GameManager.Instance != null)
+        else
         {
-            Debug.Log("[AlienHealth] All aliens eliminated! Astronaut wins!");
-            GameManager.Instance.EndGameNetworked(GameManager.WinCondition.AstronautWins);
+            // Single player fallback - do local logic
+            if (StressSystem.Instance != null)
+            {
+                StressSystem.Instance.ReduceStress(stressReductionOnKill);
+            }
+
+            // Count remaining alive aliens locally
+            int aliveAliens = 0;
+            AlienHealth[] allAliens = FindObjectsByType<AlienHealth>(FindObjectsSortMode.None);
+            foreach (var alien in allAliens)
+            {
+                if (!alien.IsDead)
+                {
+                    aliveAliens++;
+                }
+            }
+
+            if (aliveAliens == 0 && GameManager.Instance != null)
+            {
+                GameManager.Instance.EndGame(GameManager.WinCondition.AstronautWins);
+            }
         }
 
         // Disable alien controls
@@ -184,8 +196,24 @@ public class AlienHealth : MonoBehaviour, IDamageable
             yield return null;
         }
 
-        // Destroy after delay
-        Destroy(gameObject, 3f);
+        // NETWORK: Don't destroy networked players - server handles despawn
+        // Just disable visuals and let spectator mode work
+        var networkObject = GetComponent<Unity.Netcode.NetworkObject>();
+        if (networkObject != null && networkObject.IsSpawned)
+        {
+            // Disable renderers to hide the dead player
+            foreach (var renderer in GetComponentsInChildren<Renderer>())
+            {
+                renderer.enabled = false;
+            }
+            Debug.Log("[AlienHealth] Networked player - hiding visuals instead of destroying");
+            // Server will handle cleanup when game ends
+        }
+        else
+        {
+            // Single player - safe to destroy
+            Destroy(gameObject, 3f);
+        }
     }
 
     void UpdateUI()

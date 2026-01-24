@@ -22,6 +22,9 @@ public class GameBootstrap : MonoBehaviour
     public bool createNetworkGameManager = true;
     public bool createRoleAnnouncementUI = true;
     public bool createBulletTracerManager = true;
+    public bool createKillFeedManager = true;
+    public bool createNetworkStatusUI = true;
+    public bool createSpectatorController = true;
 
     [Header("Player Setup")]
     public bool addCameraShakeToPlayer = true;
@@ -174,6 +177,33 @@ public class GameBootstrap : MonoBehaviour
             Debug.Log("[GameBootstrap] Created RoleAnnouncementUI");
         }
 
+        // Kill Feed Manager
+        if (createKillFeedManager && KillFeedManager.Instance == null)
+        {
+            GameObject killFeedObj = new GameObject("KillFeedManager");
+            killFeedObj.AddComponent<KillFeedManager>();
+            DontDestroyOnLoad(killFeedObj);
+            Debug.Log("[GameBootstrap] Created KillFeedManager");
+        }
+
+        // Network Status UI
+        if (createNetworkStatusUI && NetworkStatusUI.Instance == null)
+        {
+            GameObject networkStatusObj = new GameObject("NetworkStatusUI");
+            networkStatusObj.AddComponent<NetworkStatusUI>();
+            DontDestroyOnLoad(networkStatusObj);
+            Debug.Log("[GameBootstrap] Created NetworkStatusUI");
+        }
+
+        // Spectator Controller (created but not activated until player dies)
+        if (createSpectatorController && SpectatorController.Instance == null)
+        {
+            GameObject spectatorObj = new GameObject("SpectatorController");
+            spectatorObj.AddComponent<SpectatorController>();
+            DontDestroyOnLoad(spectatorObj);
+            Debug.Log("[GameBootstrap] Created SpectatorController");
+        }
+
         // Add CameraShake to player camera
         if (addCameraShakeToPlayer)
         {
@@ -192,7 +222,7 @@ public class GameBootstrap : MonoBehaviour
         yield return null;
 
         // Find player camera and add CameraShake
-        PlayerMovement player = FindObjectOfType<PlayerMovement>();
+        PlayerMovement player = FindFirstObjectByType<PlayerMovement>();
         if (player != null)
         {
             Camera playerCam = player.GetCamera();
@@ -209,7 +239,7 @@ public class GameBootstrap : MonoBehaviour
         }
 
         // Also check for alien camera
-        AlienController alien = FindObjectOfType<AlienController>();
+        AlienController alien = FindFirstObjectByType<AlienController>();
         if (alien != null)
         {
             Camera alienCam = alien.GetCamera();
@@ -239,7 +269,7 @@ public class GameBootstrap : MonoBehaviour
         // Setup astronaut
         if (addHealthToAstronaut)
         {
-            PlayerMovement player = FindObjectOfType<PlayerMovement>();
+            PlayerMovement player = FindFirstObjectByType<PlayerMovement>();
             if (player != null && player.GetComponent<AstronautHealth>() == null)
             {
                 player.gameObject.AddComponent<AstronautHealth>();
@@ -250,7 +280,7 @@ public class GameBootstrap : MonoBehaviour
         // Setup alien
         if (addAbilitiesToAlien)
         {
-            AlienController alien = FindObjectOfType<AlienController>();
+            AlienController alien = FindFirstObjectByType<AlienController>();
             if (alien != null)
             {
                 if (alien.GetComponent<AlienAbilities>() == null)

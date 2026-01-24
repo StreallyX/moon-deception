@@ -1,5 +1,6 @@
 using UnityEngine;
 using System.Collections;
+using Unity.Netcode;
 
 /// <summary>
 /// Alarm terminal that aliens can activate to stress the astronaut.
@@ -9,7 +10,8 @@ using System.Collections;
 public class AlarmTerminal : Interactable
 {
     [Header("Alarm Settings")]
-    public float stressAmount = 10f;
+    public float stressAmountNearby = 6f; // Stress when astronaut is nearby
+    public float stressAmountFar = 2f; // Small stress even when astronaut is far
     public float alarmRadius = 30f;
     public float alarmDuration = 5f;
     public float alarmCooldown = 30f;
@@ -164,10 +166,14 @@ public class AlarmTerminal : Interactable
 
     void StressAstronautIfInRange()
     {
+        // Always add stress via network (works in multiplayer)
+        float stressToAdd = stressAmountNearby;
+
+        // Try to calculate distance-based stress if we can find astronaut locally
         StressSystem stress = StressSystem.Instance;
         if (stress == null)
         {
-            stress = FindObjectOfType<StressSystem>();
+            stress = FindFirstObjectByType<StressSystem>();
         }
 
         if (stress != null)
@@ -178,21 +184,40 @@ public class AlarmTerminal : Interactable
             {
                 // Full stress if close, reduced stress at edge
                 float distanceMultiplier = 1f - (distance / alarmRadius) * 0.5f;
-                float actualStress = stressAmount * distanceMultiplier;
-
-                stress.AddStress(actualStress);
-                Debug.Log($"[AlarmTerminal] Astronaut stressed! +{actualStress:F1} (distance: {distance:F1}m)");
+                stressToAdd = stressAmountNearby * distanceMultiplier;
+                Debug.Log($"[AlarmTerminal] Astronaut nearby ({distance:F1}m) - adding {stressToAdd:F1} stress");
             }
             else
             {
-                Debug.Log($"[AlarmTerminal] Astronaut too far ({distance:F1}m > {alarmRadius}m)");
+                // Still add small amount even if far (alarm is unsettling)
+                stressToAdd = stressAmountFar;
+                Debug.Log($"[AlarmTerminal] Astronaut far ({distance:F1}m) - adding {stressToAdd:F1} stress");
             }
+        }
+        else
+        {
+            // Can't find astronaut locally (they're on another machine)
+            // Use default stress amount
+            stressToAdd = stressAmountFar;
+            Debug.Log($"[AlarmTerminal] Astronaut not found locally - adding {stressToAdd:F1} stress via network");
+        }
+
+        // NETWORK SYNC: Apply stress via NetworkAudioManager (works across all clients)
+        if (NetworkAudioManager.Instance != null)
+        {
+            NetworkAudioManager.Instance.ApplyStressToAstronaut(stressToAdd);
+        }
+        else if (stress != null)
+        {
+            // Fallback for single player
+            stress.AddStress(stressToAdd);
         }
     }
 
     void PanicNearbyNPCs()
     {
-        NPCBehavior[] npcs = FindObjectsOfType<NPCBehavior>();
+        bool isNetworked = NetworkManager.Singleton != null && NetworkManager.Singleton.IsConnectedClient;
+        NPCBehavior[] npcs = FindObjectsByType<NPCBehavior>(FindObjectsSortMode.None);
 
         int panickedCount = 0;
         foreach (var npc in npcs)
@@ -202,7 +227,15 @@ public class AlarmTerminal : Interactable
             float distance = Vector3.Distance(transform.position, npc.transform.position);
             if (distance <= alarmRadius)
             {
-                npc.Panic();
+                // Use RPC if networked, local otherwise
+                if (isNetworked && npc.IsSpawned)
+                {
+                    npc.PanicServerRpc();
+                }
+                else
+                {
+                    npc.Panic();
+                }
                 panickedCount++;
             }
         }
@@ -256,7 +289,7 @@ public class AlarmTerminal : Interactable
         Gizmos.DrawWireSphere(transform.position, alarmRadius);
 
         #if UNITY_EDITOR
-        UnityEditor.Handles.Label(transform.position + Vector3.up * 3f, $"Alarm Terminal\nRadius: {alarmRadius}m\nStress: +{stressAmount}");
+        UnityEditor.Handles.Label(transform.position + Vector3.up * 3f, $"Alarm Terminal\nRadius: {alarmRadius}m\nStress: +{stressAmountNearby} (nearby) / +{stressAmountFar} (far)");
         #endif
     }
 }

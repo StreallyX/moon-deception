@@ -31,6 +31,9 @@ public class SimpleCrosshair : MonoBehaviour
     {
         if (crosshairTexture == null) return;
 
+        // Don't show crosshair if game ended
+        if (GameManager.Instance != null && GameManager.Instance.CurrentPhase == GameManager.GamePhase.Ended) return;
+
         GUI.color = crosshairColor;
         
         float centerX = Screen.width / 2f;

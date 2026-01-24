@@ -1,5 +1,6 @@
 using UnityEngine;
 using System.Collections;
+using Unity.Netcode;
 
 /// <summary>
 /// Handles alien transformation during Chaos phase.
@@ -114,7 +115,7 @@ public class AlienTransformation : MonoBehaviour
     {
         // In multiplayer, look for NetworkedPlayer that is astronaut FIRST
         // This is the most reliable method because NetworkedPlayer exists on both local and remote players
-        var networkedPlayers = FindObjectsOfType<NetworkedPlayer>();
+        var networkedPlayers = FindObjectsByType<NetworkedPlayer>(FindObjectsSortMode.None);
         foreach (var np in networkedPlayers)
         {
             // Check both the local flag and the NetworkVariable
@@ -127,7 +128,7 @@ public class AlienTransformation : MonoBehaviour
         }
 
         // Fallback: Find astronaut by components (single player or components enabled)
-        var stressSystem = FindObjectOfType<StressSystem>();
+        var stressSystem = FindFirstObjectByType<StressSystem>();
         if (stressSystem != null)
         {
             astronautTransform = stressSystem.transform;
@@ -135,7 +136,7 @@ public class AlienTransformation : MonoBehaviour
             return;
         }
 
-        var playerMovement = FindObjectOfType<PlayerMovement>();
+        var playerMovement = FindFirstObjectByType<PlayerMovement>();
         if (playerMovement != null)
         {
             astronautTransform = playerMovement.transform;
@@ -144,7 +145,7 @@ public class AlienTransformation : MonoBehaviour
         }
 
         // Last resort: Look for AstronautHealth component
-        var astronautHealth = FindObjectOfType<AstronautHealth>();
+        var astronautHealth = FindFirstObjectByType<AstronautHealth>();
         if (astronautHealth != null)
         {
             astronautTransform = astronautHealth.transform;
@@ -325,6 +326,14 @@ public class AlienTransformation : MonoBehaviour
         {
             alienController.walkSpeed = transformedWalkSpeed;
             alienController.runSpeed = transformedRunSpeed;
+        }
+
+        // NETWORK: Sync transformation visuals to all clients
+        var networkedPlayer = GetComponent<NetworkedPlayer>();
+        if (networkedPlayer != null && NetworkManager.Singleton != null && NetworkManager.Singleton.IsConnectedClient)
+        {
+            networkedPlayer.SyncTransformationServerRpc(true);
+            Debug.Log("[AlienTransformation] Sent transformation sync RPC");
         }
 
         // Create wall-hack system
@@ -565,8 +574,19 @@ public class AlienTransformation : MonoBehaviour
 
     public void ResetTransformation()
     {
+        bool wasTransformed = isTransformed;
         isTransformed = false;
         transform.localScale = originalScale;
+
+        // NETWORK: Sync reset to all clients
+        if (wasTransformed)
+        {
+            var networkedPlayer = GetComponent<NetworkedPlayer>();
+            if (networkedPlayer != null && NetworkManager.Singleton != null && NetworkManager.Singleton.IsConnectedClient)
+            {
+                networkedPlayer.SyncTransformationServerRpc(false);
+            }
+        }
 
         if (alienController != null)
         {
@@ -653,6 +673,9 @@ public class AlienTransformation : MonoBehaviour
     void OnGUI()
     {
         if (!isTransformed || !AlienController.IsAlienControlled) return;
+
+        // Don't show UI if game ended
+        if (GameManager.Instance != null && GameManager.Instance.CurrentPhase == GameManager.GamePhase.Ended) return;
 
         // Hunt mode indicator
         GUIStyle titleStyle = new GUIStyle(GUI.skin.label);

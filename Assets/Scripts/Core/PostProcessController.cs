@@ -78,7 +78,7 @@ public class PostProcessController : MonoBehaviour
         // Find or create volume
         if (postProcessVolume == null)
         {
-            postProcessVolume = FindObjectOfType<Volume>();
+            postProcessVolume = FindFirstObjectByType<Volume>();
 
             if (postProcessVolume == null)
             {
@@ -352,6 +352,12 @@ public class PostProcessController : MonoBehaviour
 
     void OnDestroy()
     {
+        // CRITICAL: Clear static instance to prevent stale references after scene reload
+        if (Instance == this)
+        {
+            Instance = null;
+        }
+
         if (hasSubscribedToStress && StressSystem.Instance != null)
         {
             StressSystem.Instance.OnStressChanged.RemoveListener(OnStressChanged);

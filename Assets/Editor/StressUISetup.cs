@@ -7,7 +7,7 @@ public class StressUISetup : MonoBehaviour
     [MenuItem("Moon Deception/Setup Stress UI")]
     public static void SetupStressUI()
     {
-        Canvas canvas = FindObjectOfType<Canvas>();
+        Canvas canvas = FindFirstObjectByType<Canvas>();
         if (canvas == null)
         {
             GameObject canvasObj = new GameObject("Canvas");
@@ -82,7 +82,7 @@ public class StressUISetup : MonoBehaviour
         labelText.alignment = TextAnchor.MiddleCenter;
         labelText.color = Color.white;
 
-        StressSystem stressSystem = FindObjectOfType<StressSystem>();
+        StressSystem stressSystem = FindFirstObjectByType<StressSystem>();
         if (stressSystem != null)
         {
             var so = new SerializedObject(stressSystem);
