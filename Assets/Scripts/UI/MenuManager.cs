@@ -16,6 +16,9 @@ public class MenuManager : MonoBehaviour
     public bool isMainMenu = false;
     public bool isPaused = false;
 
+    // Public property for other scripts to check
+    public bool IsMainMenuActive => isMainMenu || (mainMenuPanel != null && mainMenuPanel.activeSelf);
+
     [Header("Style")]
     public Color backgroundColor = new Color(0.05f, 0.05f, 0.1f, 0.95f);
     public Color primaryColor = new Color(0.2f, 0.6f, 0.9f);
@@ -685,23 +688,31 @@ public class MenuManager : MonoBehaviour
     {
         Debug.Log("[MenuManager] Returning to main menu...");
 
+        // IMPORTANT: Reset time scale FIRST to ensure button events process correctly
         Time.timeScale = 1f;
         isPaused = false;
-        HideAllMenus();
 
-        // === CLEANUP ALL GAMEPLAY UI ===
-        // Clear kill feed
-        if (KillFeedManager.Instance != null)
-        {
-            KillFeedManager.Instance.ClearAll();
-            Debug.Log("[MenuManager] Cleared kill feed");
-        }
+        // === CLEANUP ALL GAMEPLAY UI AND PERSISTENT OBJECTS ===
 
-        // Deactivate spectator mode
+        // Deactivate spectator mode FIRST (destroys spectator camera)
         if (SpectatorController.Instance != null)
         {
             SpectatorController.Instance.Deactivate();
             Debug.Log("[MenuManager] Deactivated spectator mode");
+        }
+
+        // Destroy the KillFeedManager completely (it will be recreated next game)
+        if (KillFeedManager.Instance != null)
+        {
+            Destroy(KillFeedManager.Instance.gameObject);
+            Debug.Log("[MenuManager] Destroyed KillFeedManager");
+        }
+
+        // Destroy NetworkStatusUI (recreated next game)
+        if (NetworkStatusUI.Instance != null)
+        {
+            Destroy(NetworkStatusUI.Instance.gameObject);
+            Debug.Log("[MenuManager] Destroyed NetworkStatusUI");
         }
 
         // Hide all gameplay UI
@@ -710,6 +721,19 @@ public class MenuManager : MonoBehaviour
             GameUIManager.Instance.OnGameEnded();
             Debug.Log("[MenuManager] Hidden all gameplay UI");
         }
+
+        // Destroy any leftover spectator cameras
+        var spectatorCams = GameObject.FindObjectsByType<Camera>(FindObjectsSortMode.None);
+        foreach (var cam in spectatorCams)
+        {
+            if (cam.gameObject.name == "SpectatorCamera")
+            {
+                Destroy(cam.gameObject);
+                Debug.Log("[MenuManager] Destroyed leftover SpectatorCamera");
+            }
+        }
+
+        HideAllMenus();
 
         // Reset NetworkGameManager state BEFORE shutting down
         if (NetworkGameManager.Instance != null)

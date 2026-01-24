@@ -179,6 +179,23 @@ public class SpectatorController : MonoBehaviour
 
     void HandleInput()
     {
+        // Don't process input if game ended or menu is showing
+        if (GameManager.Instance != null && GameManager.Instance.CurrentPhase == GameManager.GamePhase.Ended)
+        {
+            return;
+        }
+
+        // Don't process input if cursor is visible (menu is open)
+        if (Cursor.visible && Cursor.lockState == CursorLockMode.None)
+        {
+            // Only allow TAB to switch players when menu/game over is showing
+            if (Input.GetKeyDown(KeyCode.Tab))
+            {
+                CycleTarget();
+            }
+            return;
+        }
+
         // TAB - cycle through players
         if (Input.GetKeyDown(KeyCode.Tab))
         {

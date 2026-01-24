@@ -335,7 +335,7 @@ public class SimpleNetworkTest : MonoBehaviour
 
     void OnGUI()
     {
-        // Hide debug UI during gameplay - only show in lobby/menu
+        // Hide debug UI during gameplay AND in main menu
         if (GameManager.Instance != null)
         {
             var phase = GameManager.Instance.CurrentPhase;
@@ -345,6 +345,18 @@ public class SimpleNetworkTest : MonoBehaviour
             {
                 return; // Don't show debug UI during game
             }
+        }
+
+        // Also hide if MenuManager shows main menu
+        if (MenuManager.Instance != null && MenuManager.Instance.IsMainMenuActive)
+        {
+            return;
+        }
+
+        // Hide if on MainMenu scene
+        if (UnityEngine.SceneManagement.SceneManager.GetActiveScene().name == "MainMenu")
+        {
+            return;
         }
 
         GUIStyle style = new GUIStyle(GUI.skin.label);
